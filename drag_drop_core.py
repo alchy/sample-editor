@@ -1,5 +1,5 @@
 """
-drag_drop_core.py - Základní drag & drop komponenty pro Sampler Editor - kompletní refaktorováno pro velocity_amplitude
+drag_drop_core.py - Základní drag & drop komponenty s sample selection podporou - KOMPLETNÍ
 """
 
 from typing import List, Optional
@@ -279,11 +279,12 @@ class DragDropListWidget(QListWidget):
 
 
 class DragDropMatrixCell(QPushButton):
-    """Buňka matice s podporou drop operací, přehrávání a drag mezi pozicemi"""
+    """Buňka matice s podporou drop operací, přehrávání a drag mezi pozicemi + sample selection"""
 
     sample_dropped = Signal(object, int, int)  # sample, midi, velocity
     sample_play_requested = Signal(object)  # sample
     sample_moved = Signal(object, int, int, int, int)  # sample, old_midi, old_velocity, new_midi, new_velocity
+    sample_selected = Signal(object)  # NOVÝ: sample vybraný kliknutím (ne přehrávání)
 
     def __init__(self, midi_note: int, velocity: int):
         super().__init__()
@@ -291,32 +292,65 @@ class DragDropMatrixCell(QPushButton):
         self.velocity = velocity
         self.sample = None
         self.drag_start_position = None
+        self.is_highlighted = False  # NOVÝ: tracking zvýraznění
 
         self.setAcceptDrops(True)
         self.setFixedSize(70, 35)
+        self._update_style()
+
+    def highlight_as_selected(self):
+        """NOVÝ: Zvýrazní buňku jako vybranou"""
+        self.is_highlighted = True
+        self._update_style()
+
+    def remove_highlight(self):
+        """NOVÝ: Odebere zvýraznění buňky"""
+        self.is_highlighted = False
         self._update_style()
 
     def _update_style(self):
         """Aktualizuje styl buňky podle stavu"""
         if self.sample:
             # Obsazená buňka
-            self.setStyleSheet("""
-                QPushButton {
-                    background-color: #4CAF50;
-                    color: white;
-                    border: 2px solid #45a049;
-                    border-radius: 5px;
-                    font-size: 9px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #45a049;
-                    border: 2px solid #3d8b40;
-                }
-                QPushButton:pressed {
-                    background-color: #3d8b40;
-                }
-            """)
+            if self.is_highlighted:
+                # Zvýrazněná obsazená buňka
+                self.setStyleSheet("""
+                    QPushButton {
+                        background-color: #ff9800;
+                        color: white;
+                        border: 3px solid #f57c00;
+                        border-radius: 5px;
+                        font-size: 9px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #f57c00;
+                        border: 3px solid #ef6c00;
+                    }
+                    QPushButton:pressed {
+                        background-color: #ef6c00;
+                    }
+                """)
+            else:
+                # Normální obsazená buňka
+                self.setStyleSheet("""
+                    QPushButton {
+                        background-color: #4CAF50;
+                        color: white;
+                        border: 2px solid #45a049;
+                        border-radius: 5px;
+                        font-size: 9px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #45a049;
+                        border: 2px solid #3d8b40;
+                    }
+                    QPushButton:pressed {
+                        background-color: #3d8b40;
+                    }
+                """)
+
             # Zkrácený název souboru
             display_name = self.sample.filename[:8] + "..." if len(self.sample.filename) > 8 else self.sample.filename
             self.setText(display_name)
@@ -344,7 +378,7 @@ class DragDropMatrixCell(QPushButton):
 
     def _create_sample_tooltip(self) -> str:
         """Vytvoří rozšířený tooltip pro sample - ZMĚNA: používá velocity_amplitude"""
-        tooltip_text = (f"Levý klik = přehrát | Pravý klik = info | Tažení = přesunout\n"
+        tooltip_text = (f"Levý klik = vybrat+přehrát | Pravý klik = info | Tažení = přesunout\n"
                        f"Soubor: {self.sample.filename}\n")
 
         if self.sample.detected_midi:
@@ -380,6 +414,8 @@ class DragDropMatrixCell(QPushButton):
             self.drag_start_position = event.pos()
 
             if self.sample:
+                # ZMĚNA: Emit sample_selected signál pro synchronizaci
+                self.sample_selected.emit(self.sample)
                 # Pokud buňka obsahuje sample, můžeme ho přehrát
                 self.sample_play_requested.emit(self.sample)
 
@@ -670,107 +706,3 @@ class DragDropMatrixCell(QPushButton):
         # Emit signal
         self.sample_dropped.emit(sample, self.midi_note, self.velocity)
         event.acceptProposedAction()
-
-    def _handle_matrix_drop(self, event):
-        """Obsluha drop z jiné pozice v matici"""
-        data = event.mimeData().data("application/x-matrix-sample").data().decode()
-        filename, old_midi_str, old_velocity_str = data.split("|")
-        old_midi = int(old_midi_str)
-        old_velocity = int(old_velocity_str)
-
-        # Kontrola, že to není drop na stejnou pozici
-        if old_midi == self.midi_note and old_velocity == self.velocity:
-            event.ignore()
-            return
-
-        # Najdi sample v parent widget
-        main_window = WidgetFinder.find_main_window(self)
-        if not main_window:
-            event.ignore()
-            return
-
-        sample = WidgetFinder.find_sample_by_filename(main_window, filename)
-        if not sample:
-            event.ignore()
-            return
-
-        # Kontrola obsazené buňky
-        if self.sample:
-            old_note = MidiUtils.midi_to_note_name(old_midi)
-            new_note = MidiUtils.midi_to_note_name(self.midi_note)
-
-            reply = QMessageBox.question(self, "Přepsat sample?",
-                                       f"Pozice {new_note} (MIDI {self.midi_note}, V{self.velocity}) "
-                                       f"už obsahuje {self.sample.filename}.\n\n"
-                                       f"Chcete přesunout {sample.filename} "
-                                       f"z {old_note} (MIDI {old_midi}, V{old_velocity}) "
-                                       f"a přepsat současný sample?",
-                                       QMessageBox.Yes | QMessageBox.No)
-            if reply != QMessageBox.Yes:
-                event.ignore()
-                return
-
-            # Označ přepsaný sample jako nemapovaný
-            self.sample.mapped = False
-
-        # Najdi a vyčisti starou pozici
-        matrix_widget = WidgetFinder.find_matrix_widget(self)
-        if matrix_widget:
-            old_key = (old_midi, old_velocity)
-            if old_key in matrix_widget.matrix_cells:
-                old_cell = matrix_widget.matrix_cells[old_key]
-                old_cell.sample = None
-                old_cell._update_style()
-
-                # Odstraň z mapping
-                if old_key in matrix_widget.mapping:
-                    del matrix_widget.mapping[old_key]
-
-        # Nastav novou pozici
-        self.sample = sample
-        self._update_style()
-
-        # Aktualizuj mapping v matrix widget
-        if matrix_widget:
-            matrix_widget.mapping[(self.midi_note, self.velocity)] = sample
-            matrix_widget._update_stats()
-
-        # Emit signál pro přesun
-        self.sample_moved.emit(sample, old_midi, old_velocity, self.midi_note, self.velocity)
-        event.acceptProposedAction()
-
-
-# Utility funkce pro nalezení parent widgetů
-class WidgetFinder:
-    """Utility třída pro nalezení parent widgetů"""
-
-    @staticmethod
-    def find_main_window(widget):
-        """Najde hlavní okno aplikace"""
-        current_widget = widget
-        while current_widget.parent():
-            current_widget = current_widget.parent()
-            if hasattr(current_widget, 'samples'):
-                return current_widget
-        return None
-
-    @staticmethod
-    def find_matrix_widget(widget):
-        """Najde matrix widget"""
-        current_widget = widget
-        while current_widget.parent():
-            current_widget = current_widget.parent()
-            if hasattr(current_widget, 'mapping') and hasattr(current_widget, 'matrix_cells'):
-                return current_widget
-        return None
-
-    @staticmethod
-    def find_sample_by_filename(main_window, filename: str) -> Optional[SampleMetadata]:
-        """Najde sample podle filename v hlavním okně"""
-        if not main_window or not hasattr(main_window, 'samples'):
-            return None
-
-        for sample in main_window.samples:
-            if sample.filename == filename:
-                return sample
-        return None

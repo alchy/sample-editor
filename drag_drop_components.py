@@ -1,5 +1,5 @@
 """
-drag_drop_components.py - Hlavní drag & drop komponenty - refaktorováno pro velocity_amplitude
+drag_drop_components.py - Hlavní drag & drop komponenty s obousměrnou synchronizací výběru
 """
 
 from typing import List
@@ -22,6 +22,7 @@ class DragDropMappingMatrix(QGroupBox):
     sample_play_requested = Signal(object)  # sample
     midi_note_play_requested = Signal(int)  # midi_note
     sample_moved = Signal(object, int, int, int, int)  # sample, old_midi, old_velocity, new_midi, new_velocity
+    sample_selected_in_matrix = Signal(object)  # NOVÝ: sample vybraný v matici
 
     def __init__(self):
         super().__init__("Mapovací matice: Celý piano rozsah A0-C8 (nejvyšší frekvence nahoře)")
@@ -124,6 +125,8 @@ class DragDropMappingMatrix(QGroupBox):
                 cell.sample_dropped.connect(self._on_sample_dropped)
                 cell.sample_play_requested.connect(self.sample_play_requested.emit)
                 cell.sample_moved.connect(self._on_sample_moved)
+                # NOVÝ: připojení signálu pro výběr sample v matici
+                cell.sample_selected.connect(self._on_sample_selected_in_matrix)
 
                 # Pokud už je namapovaný sample, nastav ho
                 key = (midi_note, velocity)
@@ -135,6 +138,10 @@ class DragDropMappingMatrix(QGroupBox):
                 self.matrix_cells[(midi_note, velocity)] = cell
 
         self.matrix_widget.setLayout(matrix_layout)
+
+    def _on_sample_selected_in_matrix(self, sample: SampleMetadata):
+        """NOVÝ: Obsluha výběru sample v matici - propaguj dál"""
+        self.sample_selected_in_matrix.emit(sample)
 
     def _create_clear_note_button(self, midi_note: int) -> QPushButton:
         """Vytvoří clear tlačítko pro celou MIDI notu"""
@@ -316,6 +323,7 @@ class DragDropMappingMatrix(QGroupBox):
         # Pokud pozice už obsahuje sample, může podporovat více samples
         existing_sample = self.mapping.get(key)
         if existing_sample:
+            from main import logger
             logger.info(f"Position {MidiUtils.midi_to_note_name(midi_note)} V{velocity} already has {existing_sample.filename}, "
                        f"adding {sample.filename} (metadata-based assignment)")
             # Pro teď přepíšeme - v budoucnu lze rozšířit na seznam
@@ -367,13 +375,29 @@ class DragDropMappingMatrix(QGroupBox):
                         scroll_area.verticalScrollBar().setValue(target_y - 200)  # Offset pro lepší viditelnost
                 break
 
+    def highlight_sample_in_matrix(self, target_sample: SampleMetadata):
+        """NOVÝ: Zvýrazní sample v matici (pro synchronizaci ze sample listu)"""
+        # Najdi pozici sample v matici a zvýrazni ji
+        for (midi_note, velocity), sample in self.mapping.items():
+            if sample == target_sample:
+                key = (midi_note, velocity)
+                if key in self.matrix_cells:
+                    cell = self.matrix_cells[key]
+                    cell.highlight_as_selected()
+            else:
+                # Odeber zvýraznění z ostatních buněk
+                key = (midi_note, velocity)
+                if key in self.matrix_cells:
+                    cell = self.matrix_cells[key]
+                    cell.remove_highlight()
+
     def get_displayed_range(self):
         """Vrátí celý piano rozsah (pro kompatibilitu)"""
         return (self.piano_min_midi, self.piano_max_midi)
 
 
 class DragDropSampleList(QGroupBox):
-    """Seznam samples s podporou drag operací a rozšířenými informacemi - refaktorováno pro velocity_amplitude"""
+    """Seznam samples s podporou drag operací a rozšířenými informacemi + synchronizací výběru"""
 
     sample_selected = Signal(object)
     play_requested = Signal(object)
@@ -383,6 +407,7 @@ class DragDropSampleList(QGroupBox):
     def __init__(self):
         super().__init__("Analyzované samples - MEZERNÍK = přehrát | S = porovnat | D = současně")
         self.samples = []
+        self.current_selected_sample = None  # NOVÝ: tracking aktuálně vybraného sample
         self.init_ui()
 
     def init_ui(self):
@@ -417,6 +442,37 @@ class DragDropSampleList(QGroupBox):
         layout.addWidget(self.sample_list)
 
         self.setLayout(layout)
+
+    def highlight_sample_in_list(self, target_sample: SampleMetadata):
+        """NOVÝ: Zvýrazní sample v seznamu (pro synchronizaci z matice)"""
+        self.current_selected_sample = target_sample
+
+        # Najdi a vyberi odpovídající item v seznamu
+        for i in range(self.sample_list.count()):
+            item = self.sample_list.item(i)
+            sample = item.data(Qt.UserRole)
+
+            if sample == target_sample:
+                # Vyberi item a posuň na něj view
+                self.sample_list.setCurrentItem(item)
+                self.sample_list.scrollToItem(item, self.sample_list.PositionAtCenter)
+
+                # Přidej speciální zvýraznění
+                original_bg = item.background()
+                item.setBackground(QColor("#ffeb3b"))  # Žlutá pro zvýraznění
+
+                # Po chvíli vrať původní barvu (optional - pro efekt bliknutí)
+                from PySide6.QtCore import QTimer
+                def restore_color():
+                    if sample.is_filtered:
+                        item.setBackground(QColor("#e0e0e0"))
+                    elif sample.mapped:
+                        item.setBackground(QColor("#e8f5e8"))
+                    else:
+                        item.setBackground(QColor("#ffffff"))
+
+                QTimer.singleShot(1000, restore_color)  # Vrať barvu po 1 sekundě
+                break
 
     def update_samples(self, samples: List[SampleMetadata]):
         """Aktualizuje seznam samples - ZMĚNA: používá velocity_amplitude"""
@@ -454,6 +510,10 @@ class DragDropSampleList(QGroupBox):
             self._set_item_colors_and_tooltip(item, sample)
 
             self.sample_list.addItem(item)
+
+        # Obnov výběr pokud byl nějaký sample vybraný
+        if self.current_selected_sample:
+            self.highlight_sample_in_list(self.current_selected_sample)
 
     def _create_sample_item_text(self, sample: SampleMetadata) -> str:
         """Vytvoří text pro sample item - ZMĚNA: používá velocity_amplitude"""
@@ -546,6 +606,7 @@ class DragDropSampleList(QGroupBox):
     def _on_item_clicked(self, item):
         """Obsluha kliknutí na item"""
         sample = item.data(Qt.UserRole)
+        self.current_selected_sample = sample
         self.sample_selected.emit(sample)
 
     def refresh_display(self):
