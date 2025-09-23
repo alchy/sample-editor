@@ -10,14 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 class AmplitudeAnalyzer:
-    """Analyzátor peak amplitude s sliding window"""
+    """Analyzátor peak amplitude s sliding window a percentilovou filtrací"""
 
-    def __init__(self, window_ms: float = 10.0):
+    def __init__(self, window_ms: float = 10.0, percentile: float = 99.5):
         self.window_ms = window_ms
+        self.percentile = percentile  # Nový parametr pro percentilové filtrování
 
     def analyze_peak_amplitude(self, waveform: np.ndarray, sr: int) -> Dict:
         """
-        Analyzuje peak amplitude v sliding window
+        Analyzuje peak amplitude v sliding window s percentilovou filtrací
 
         Returns:
             Dict s peak_amplitude, peak_position, rms_amplitude
@@ -42,19 +43,20 @@ class AmplitudeAnalyzer:
 
             for i in range(0, len(audio) - window_size + 1, hop_size):
                 window = audio[i:i + window_size]
-                peak_values.append(np.max(np.abs(window)))
+                # Percentilová filtrace místo absolutního maxima
+                window_peak = np.percentile(np.abs(window), self.percentile)
+                peak_values.append(window_peak)
 
             if not peak_values:
-                # Fallback pro velmi krátké audio
-                peak_amplitude = np.max(np.abs(audio))
-                peak_position = np.argmax(np.abs(audio))
+                # Fallback pro velmi krátké audio - použij percentil celého signálu
+                peak_amplitude = np.percentile(np.abs(audio), self.percentile)
+                peak_position = self._find_peak_position_percentile(audio, self.percentile)
             else:
-                # Globální peak ze všech oken
+                # Globální peak ze všech oken (s percentilovou filtrací)
                 peak_amplitude = np.max(peak_values)
 
-                # Najdi pozici globálního peaku
-                global_peak_idx = np.argmax(np.abs(audio))
-                peak_position = global_peak_idx
+                # Najdi pozici odpovídající percentilové hodnotě
+                peak_position = self._find_peak_position_percentile(audio, self.percentile)
 
             # RMS pro reference
             rms_amplitude = np.sqrt(np.mean(audio ** 2)) if len(audio) > 0 else 0.0
@@ -63,7 +65,12 @@ class AmplitudeAnalyzer:
             peak_db = 20 * np.log10(peak_amplitude) if peak_amplitude > 1e-10 else -np.inf
             rms_db = 20 * np.log10(rms_amplitude) if rms_amplitude > 1e-10 else -np.inf
 
-            logger.debug(f"Peak amplitude: {peak_amplitude:.6f} ({peak_db:.1f} dB), "
+            # Dodatečné metriky pro percentilové filtrování
+            abs_max = np.max(np.abs(audio))  # Pro srovnání s absolutním maximem
+            percentile_ratio = peak_amplitude / abs_max if abs_max > 0 else 1.0
+
+            logger.debug(f"Peak amplitude (P{self.percentile}): {peak_amplitude:.6f} ({peak_db:.1f} dB), "
+                        f"Abs max: {abs_max:.6f}, Ratio: {percentile_ratio:.3f}, "
                         f"RMS: {rms_amplitude:.6f} ({rms_db:.1f} dB)")
 
             return {
@@ -74,12 +81,33 @@ class AmplitudeAnalyzer:
                 'peak_position': int(peak_position),
                 'peak_position_seconds': float(peak_position / sr),
                 'window_ms': self.window_ms,
-                'analysis_windows': len(peak_values) if peak_values else 1
+                'analysis_windows': len(peak_values) if peak_values else 1,
+                # Nové metriky pro percentilové filtrování
+                'percentile_used': self.percentile,
+                'absolute_max': float(abs_max),
+                'percentile_ratio': float(percentile_ratio)
             }
 
         except Exception as e:
             logger.error(f"Amplitude analysis failed: {e}")
             return self._empty_result()
+
+    def _find_peak_position_percentile(self, audio: np.ndarray, percentile: float) -> int:
+        """
+        Najde pozici odpovídající percentilové hodnotě
+        """
+        abs_audio = np.abs(audio)
+        percentile_value = np.percentile(abs_audio, percentile)
+
+        # Najdi první pozici, kde signál dosahuje percentilové hodnoty
+        candidates = np.where(abs_audio >= percentile_value)[0]
+
+        if len(candidates) > 0:
+            # Vrať pozici uprostřed oblasti s vysokými hodnotami
+            return int(np.median(candidates))
+        else:
+            # Fallback na absolutní maximum
+            return int(np.argmax(abs_audio))
 
     def _empty_result(self) -> Dict:
         """Prázdný výsledek"""
@@ -91,13 +119,20 @@ class AmplitudeAnalyzer:
             'peak_position': 0,
             'peak_position_seconds': 0.0,
             'window_ms': self.window_ms,
-            'analysis_windows': 0
+            'analysis_windows': 0,
+            'percentile_used': self.percentile,
+            'absolute_max': 0.0,
+            'percentile_ratio': 1.0
         }
+
+    def set_percentile(self, percentile: float):
+        """Nastaví percentil pro filtrování (99.0-100.0)"""
+        self.percentile = max(95.0, min(100.0, percentile))
 
     def analyze_attack_envelope(self, waveform: np.ndarray, sr: int,
                                attack_duration_ms: float = 100.0) -> Dict:
         """
-        Analyzuje attack envelope pro detailnější velocity info
+        Analyzuje attack envelope s percentilovou filtrací
         """
         try:
             # Převod na mono
@@ -116,16 +151,26 @@ class AmplitudeAnalyzer:
             attack_section = audio[:attack_samples]
             abs_attack = np.abs(attack_section)
 
-            # Najdi začátek signálu (nad noise floor)
-            noise_floor = np.percentile(abs_attack, 10)
+            # Percentilové filtrování pro noise floor
+            noise_floor = np.percentile(abs_attack, 10)  # 10. percentil jako noise floor
             signal_threshold = noise_floor * 3
 
             signal_start_candidates = np.where(abs_attack > signal_threshold)[0]
             if len(signal_start_candidates) == 0:
-                return {'attack_peak': np.max(abs_attack), 'attack_time': 0.0, 'attack_slope': 0.0}
+                # Použij percentilový peak místo absolutního maxima
+                attack_peak = np.percentile(abs_attack, self.percentile)
+                return {'attack_peak': attack_peak, 'attack_time': 0.0, 'attack_slope': 0.0}
 
             signal_start = signal_start_candidates[0]
-            peak_idx = np.argmax(abs_attack[signal_start:]) + signal_start
+
+            # Najdi percentilový peak v attack sekci
+            percentile_peak_value = np.percentile(abs_attack[signal_start:], self.percentile)
+            peak_candidates = np.where(abs_attack[signal_start:] >= percentile_peak_value)[0]
+
+            if len(peak_candidates) > 0:
+                peak_idx = signal_start + int(np.median(peak_candidates))
+            else:
+                peak_idx = signal_start + np.argmax(abs_attack[signal_start:])
 
             # Attack time a slope
             attack_time_samples = peak_idx - signal_start
@@ -141,7 +186,8 @@ class AmplitudeAnalyzer:
                 'attack_slope': float(attack_slope),
                 'signal_start_idx': int(signal_start),
                 'peak_idx': int(peak_idx),
-                'noise_floor': float(noise_floor)
+                'noise_floor': float(noise_floor),
+                'percentile_used': self.percentile
             }
 
         except Exception as e:
