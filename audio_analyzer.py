@@ -1,5 +1,5 @@
 """
-audio_analyzer.py - Worker thread pro batch analÃ½zu s CREPE a amplitude detekcí
+audio_analyzer.py - Worker thread pro batch analýzu s CREPE a amplitude detekci
 """
 
 import sys
@@ -21,7 +21,7 @@ except ImportError as e:
     logger = logging.getLogger(__name__)
     logger.error(f"Failed to import from amplitude_analyzer: {e}")
 
-    # Vytvořme mock třídy pro fallback
+    # Vytvoříme mock třídy pro fallback
     class AmplitudeAnalyzer:
         def __init__(self, window_ms=10.0):
             self.window_ms = window_ms
@@ -33,12 +33,15 @@ except ImportError as e:
             else:
                 audio = waveform.copy()
 
-            peak_amplitude = float(np.max(np.abs(audio))) if len(audio) > 0 else 0.0
+            velocity_amplitude = float(np.sqrt(np.mean(audio ** 2))) if len(audio) > 0 else 0.0
 
             return {
-                'peak_amplitude': peak_amplitude,
-                'peak_amplitude_db': 20 * np.log10(peak_amplitude) if peak_amplitude > 1e-10 else -np.inf,
-                'rms_amplitude': float(np.sqrt(np.mean(audio ** 2))) if len(audio) > 0 else 0.0,
+                'velocity_amplitude': velocity_amplitude,
+                'velocity_amplitude_db': 20 * np.log10(velocity_amplitude) if velocity_amplitude > 1e-10 else -np.inf,
+                'velocity_duration_ms': 500.0,
+                'peak_amplitude': float(np.max(np.abs(audio))) if len(audio) > 0 else 0.0,
+                'peak_amplitude_db': -60.0,
+                'rms_amplitude': velocity_amplitude,
                 'rms_amplitude_db': -60.0,
                 'peak_position': int(np.argmax(np.abs(audio))) if len(audio) > 0 else 0,
                 'peak_position_seconds': 0.0,
@@ -53,25 +56,25 @@ except ImportError as e:
         def __init__(self):
             self.global_min = None
             self.global_max = None
-            self.all_peak_values = []
+            self.all_velocity_values = []  # Změna: velocity values
 
-        def add_sample_amplitude(self, peak_amplitude):
-            if peak_amplitude > 0:
-                self.all_peak_values.append(peak_amplitude)
-                if self.global_min is None or peak_amplitude < self.global_min:
-                    self.global_min = peak_amplitude
-                if self.global_max is None or peak_amplitude > self.global_max:
-                    self.global_max = peak_amplitude
+        def add_sample_amplitude(self, velocity_amplitude):
+            if velocity_amplitude > 0:
+                self.all_velocity_values.append(velocity_amplitude)
+                if self.global_min is None or velocity_amplitude < self.global_min:
+                    self.global_min = velocity_amplitude
+                if self.global_max is None or velocity_amplitude > self.global_max:
+                    self.global_max = velocity_amplitude
 
         def get_range_info(self):
-            if not self.all_peak_values:
+            if not self.all_velocity_values:
                 return {'min': 0.0, 'max': 1.0, 'count': 0, 'mean': 0.0, 'std': 0.0, 'percentile_5': 0.0, 'percentile_95': 1.0}
 
-            values = np.array(self.all_peak_values)
+            values = np.array(self.all_velocity_values)
             return {
                 'min': float(self.global_min) if self.global_min else 0.0,
                 'max': float(self.global_max) if self.global_max else 1.0,
-                'count': len(self.all_peak_values),
+                'count': len(self.all_velocity_values),
                 'mean': float(np.mean(values)),
                 'std': float(np.std(values)),
                 'percentile_5': float(np.percentile(values, 5)),
@@ -81,7 +84,7 @@ except ImportError as e:
         def reset(self):
             self.global_min = None
             self.global_max = None
-            self.all_peak_values.clear()
+            self.all_velocity_values.clear()
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +105,7 @@ except ImportError:
 
 
 class BatchAnalyzer(QThread):
-    """Worker thread pro batch analÃ½zu s pitch a amplitude detekcí"""
+    """Worker thread pro batch analýzu s pitch a amplitude detekci"""
 
     progress_updated = Signal(int, str)  # progress percentage, message
     analysis_completed = Signal(list, dict)  # list of SampleMetadata, amplitude range info
@@ -122,7 +125,7 @@ class BatchAnalyzer(QThread):
         self.progress = None
 
     def run(self):
-        """SpustÃ­ batch analÃ½zu"""
+        """Spustí batch analýzu"""
         try:
             # Najdi audio soubory
             audio_files = []
@@ -156,9 +159,9 @@ class BatchAnalyzer(QThread):
                     if sample:
                         self.samples.append(sample)
 
-                        # Přidej amplitude do range manageru
-                        if sample.peak_amplitude is not None:
-                            self.amplitude_range_manager.add_sample_amplitude(sample.peak_amplitude)
+                        # ZMĚNA: Přidej VELOCITY AMPLITUDE do range manageru místo peak_amplitude
+                        if sample.velocity_amplitude is not None:
+                            self.amplitude_range_manager.add_sample_amplitude(sample.velocity_amplitude)
 
                 except Exception as e:
                     error_msg = f"Error analyzing {filepath.name}: {str(e)}"
@@ -173,13 +176,13 @@ class BatchAnalyzer(QThread):
             range_info = self.amplitude_range_manager.get_range_info()
 
             logger.info(f"Analysis completed: {len(self.samples)} samples successfully analyzed")
-            logger.info(f"Amplitude range: {range_info['min']:.6f} - {range_info['max']:.6f}")
+            logger.info(f"Velocity amplitude range: {range_info['min']:.6f} - {range_info['max']:.6f}")
 
             # Emit výsledky
             self.analysis_completed.emit(self.samples, range_info)
 
         except Exception as e:
-            logger.error(f"Chyba pÅ™i batch analÃ½ze: {e}")
+            logger.error(f"Chyba při batch analýze: {e}")
             self.analysis_completed.emit([], {})
 
     def _analyze_single_sample(self, filepath: Path) -> SampleMetadata:
@@ -211,9 +214,15 @@ class BatchAnalyzer(QThread):
             sample.pitch_confidence = pitch_result.get('confidence', 0.0)
             sample.pitch_method = pitch_result.get('method', 'unknown')
 
-            # Amplitude analýza
+            # Amplitude analýza - nová RMS approach
             amplitude_result = self.amplitude_analyzer.analyze_peak_amplitude(waveform, sr)
 
+            # HLAVNÍ HODNOTA PRO VELOCITY - RMS prvních 500ms
+            sample.velocity_amplitude = amplitude_result.get('velocity_amplitude')
+            sample.velocity_amplitude_db = amplitude_result.get('velocity_amplitude_db')
+            sample.velocity_duration_ms = amplitude_result.get('velocity_duration_ms')
+
+            # LEGACY HODNOTY (pro kompatibilitu a debug)
             sample.peak_amplitude = amplitude_result.get('peak_amplitude')
             sample.peak_amplitude_db = amplitude_result.get('peak_amplitude_db')
             sample.rms_amplitude = amplitude_result.get('rms_amplitude')
@@ -227,20 +236,20 @@ class BatchAnalyzer(QThread):
             sample.attack_time = attack_result.get('attack_time')
             sample.attack_slope = attack_result.get('attack_slope')
 
-            # Označit jako analyzovaný
+            # Označ jako analyzovaný
             sample.analyzed = True
 
-            # Log výsledků
+            # Log výsledků - ZMĚNA: používej velocity_amplitude
             pitch_info = f"MIDI {sample.detected_midi}" if sample.detected_midi else "No pitch"
-            amplitude_info = f"Peak: {sample.peak_amplitude:.6f}" if sample.peak_amplitude else "No amplitude"
+            velocity_info = f"RMS-500ms: {sample.velocity_amplitude:.6f}" if sample.velocity_amplitude else "No velocity amplitude"
 
-            logger.info(f"✓ {sample.filename}: {pitch_info}, {amplitude_info} "
+            logger.info(f"✓ {sample.filename}: {pitch_info}, {velocity_info} "
                        f"[{sample.pitch_method}, conf: {sample.pitch_confidence:.2f}]")
 
             return sample
 
         except Exception as e:
-            logger.error(f"Chyba pÅ™i analÃ½ze {filepath}: {e}")
+            logger.error(f"Chyba při analýze {filepath}: {e}")
             return None
 
     def _load_audio_file(self, filepath: Path) -> tuple:

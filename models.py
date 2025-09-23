@@ -19,10 +19,15 @@ class SampleMetadata:
         self.pitch_confidence: Optional[float] = None
         self.pitch_method: Optional[str] = None  # Nový: metoda detekce (crepe, librosa, fallback)
 
-        # Analýza výsledky - Amplitude (nové)
-        self.peak_amplitude: Optional[float] = None  # Číselná hodnota (ne 0-7)
+        # Analýza výsledky - Amplitude (nové s RMS approach)
+        self.velocity_amplitude: Optional[float] = None  # RMS prvních 500ms (hlavní pro velocity)
+        self.velocity_amplitude_db: Optional[float] = None
+        self.velocity_duration_ms: Optional[float] = None  # Délka analyzovaného úseku
+
+        # Legacy amplitude hodnoty (pro kompatibilitu)
+        self.peak_amplitude: Optional[float] = None  # Percentilový peak (legacy)
         self.peak_amplitude_db: Optional[float] = None
-        self.rms_amplitude: Optional[float] = None
+        self.rms_amplitude: Optional[float] = None  # Celkový RMS
         self.rms_amplitude_db: Optional[float] = None
         self.peak_position: Optional[int] = None  # Pozice peaku v samples
         self.peak_position_seconds: Optional[float] = None
@@ -66,15 +71,16 @@ class SampleMetadata:
         return f"{note_name} ({self.detected_frequency:.1f} Hz){confidence_str}{method_str}"
 
     def get_amplitude_info(self) -> str:
-        """Vrátí formátovanou informaci o amplitude"""
-        if self.peak_amplitude is None:
+        """Vrátí formátovanou informaci o amplitude - RMS prvních 500ms"""
+        if self.velocity_amplitude is None:
             return "No amplitude data"
 
-        db_str = f" ({self.peak_amplitude_db:.1f} dB)" if self.peak_amplitude_db is not None else ""
+        db_str = f" ({self.velocity_amplitude_db:.1f} dB)" if self.velocity_amplitude_db is not None else ""
         vel_str = f" → Vel{self.velocity_level}" if self.velocity_level is not None else ""
         filtered_str = " [FILTERED]" if self.is_filtered else ""
+        duration_str = f" (RMS {self.velocity_duration_ms:.0f}ms)" if self.velocity_duration_ms else ""
 
-        return f"Peak: {self.peak_amplitude:.6f}{db_str}{vel_str}{filtered_str}"
+        return f"RMS: {self.velocity_amplitude:.6f}{db_str}{duration_str}{vel_str}{filtered_str}"
 
     def is_valid_for_mapping(self) -> bool:
         """Kontroluje, zda je sample validní pro mapování"""
@@ -220,11 +226,12 @@ class AmplitudeFilterSettings:
             self.filter_max = self.global_max
 
     def get_velocity_thresholds(self) -> list:
-        """Vrátí thresholdy pro velocity mapování"""
+        """Vrátí thresholdy pro velocity mapování (0=nejnižší, 7=nejvyšší)"""
         if self.filter_min >= self.filter_max:
             return [0.0] * self.num_levels
 
         import numpy as np
+        # Lineární rozdělení od min (V0) k max (V7)
         return np.linspace(self.filter_min, self.filter_max, self.num_levels).tolist()
 
     def is_in_range(self, amplitude: float) -> bool:
@@ -232,15 +239,15 @@ class AmplitudeFilterSettings:
         return self.filter_min <= amplitude <= self.filter_max
 
     def get_velocity_level(self, amplitude: float) -> int:
-        """Vrátí velocity level pro danou amplitude"""
+        """Vrátí velocity level pro danou amplitude (0=nejnižší, 7=nejvyšší)"""
         if not self.is_in_range(amplitude):
             return -1  # Filtrováno
 
         thresholds = self.get_velocity_thresholds()
 
-        # Najdi odpovídající level
-        for i, threshold in enumerate(thresholds[1:], 1):
-            if amplitude <= threshold:
-                return i - 1
+        # Najdi odpovídající level (0=nejnižší amplitude, 7=nejvyšší amplitude)
+        for i in range(len(thresholds) - 1):
+            if amplitude <= thresholds[i + 1]:
+                return i
 
-        return self.num_levels - 1  # Maximální level
+        return self.num_levels - 1  # Maximální level (7)

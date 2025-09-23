@@ -1,5 +1,5 @@
 """
-main.py - HlavnÃ­ aplikace Sampler Editor s pitch/amplitude detekcí
+main.py - Hlavní aplikace Sampler Editor s pitch/amplitude detekcí - refaktorováno pro velocity_amplitude
 """
 
 import sys
@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayo
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
-# Import helper modulÅ¯
+# Import helper modulů
 from models import SampleMetadata, AmplitudeFilterSettings
 from audio_analyzer import BatchAnalyzer
 from midi_utils import MidiUtils, VelocityUtils
@@ -23,36 +23,36 @@ from sample_editor_widget import SampleMidiEditor
 from amplitude_filter_widget import AmplitudeFilterWidget
 from amplitude_analyzer import AmplitudeRangeManager
 
-# NastavenÃ­ loggingu
+# Nastavení loggingu
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 class ControlPanel(QGroupBox):
-    """Kontejner pro ovlÃ¡dacÃ­ prvky (hornÃ­ panel)"""
+    """Kontejner pro ovládací prvky (horní panel)"""
 
     input_folder_selected = Signal(Path)
     output_folder_selected = Signal(Path)
     export_requested = Signal()
 
     def __init__(self):
-        super().__init__("OvlÃ¡dÃ¡nÃ­")
+        super().__init__("Ovládání")
         self.input_folder = None
         self.output_folder = None
         self.init_ui()
 
     def init_ui(self):
-        """Inicializace ovlÃ¡dacÃ­ho panelu"""
+        """Inicializace ovládacího panelu"""
         layout = QHBoxLayout()
         layout.setSpacing(15)
 
-        # VstupnÃ­ sloÅ¾ka - kompaktnÃ­
-        self.btn_input_folder = QPushButton("VstupnÃ­ sloÅ¾ka...")
+        # Vstupní složka - kompaktní
+        self.btn_input_folder = QPushButton("Vstupní složka...")
         self.btn_input_folder.clicked.connect(self.select_input_folder)
         self.btn_input_folder.setMaximumWidth(120)
         layout.addWidget(self.btn_input_folder)
 
-        self.input_folder_label = QLabel("Å½Ã¡dnÃ¡ sloÅ¾ka")
+        self.input_folder_label = QLabel("Žádná složka")
         self.input_folder_label.setStyleSheet("color: gray; font-style: italic; font-size: 12px;")
         self.input_folder_label.setMaximumWidth(150)
         layout.addWidget(self.input_folder_label)
@@ -64,8 +64,8 @@ class ControlPanel(QGroupBox):
         separator1.setMaximumHeight(30)
         layout.addWidget(separator1)
 
-        # VÃ½stupnÃ­ sloÅ¾ka - kompaktnÃ­
-        self.btn_output_folder = QPushButton("VÃ½stupnÃ­ sloÅ¾ka...")
+        # Výstupní složka - kompaktní
+        self.btn_output_folder = QPushButton("Výstupní složka...")
         self.btn_output_folder.clicked.connect(self.select_output_folder)
         self.btn_output_folder.setMaximumWidth(120)
         layout.addWidget(self.btn_output_folder)
@@ -153,7 +153,7 @@ class StatusPanel(QGroupBox):
 
 
 class MainWindow(QMainWindow):
-    """Hlavní okno aplikace s pitch/amplitude detekcí"""
+    """Hlavní okno aplikace s pitch/amplitude detekcí - refaktorováno pro velocity_amplitude"""
 
     def __init__(self):
         super().__init__()
@@ -173,7 +173,7 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.connect_signals()
 
-        self.setWindowTitle("Sampler Editor - v0.8 (CREPE Pitch + Amplitude Detection)")
+        self.setWindowTitle("Sampler Editor - v0.8 (CREPE Pitch + Velocity Amplitude Detection)")
         self.setGeometry(100, 100, 1700, 1000)
 
     def init_ui(self):
@@ -277,7 +277,7 @@ class MainWindow(QMainWindow):
 
     def on_input_folder_selected(self, folder: Path):
         """Obsluha výběru vstupní složky"""
-        self.status_panel.update_status("Spouštím analýzu samples s CREPE pitch a amplitude detekcí...")
+        self.status_panel.update_status("Spouštím analýzu samples s CREPE pitch a velocity amplitude detekcí...")
         self.start_batch_analysis(folder)
 
     def on_output_folder_selected(self, folder: Path):
@@ -287,12 +287,13 @@ class MainWindow(QMainWindow):
         self.update_export_button_state()
 
     def on_amplitude_filter_applied(self, filter_settings: AmplitudeFilterSettings):
-        """Obsluha aplikace amplitude filtru"""
+        """Obsluha aplikace amplitude filtru - ZMĚNA: používá velocity_amplitude"""
         # Označit samples mimo rozsah šedou barvou
         filtered_count = 0
         for sample in self.samples:
-            if sample.peak_amplitude is not None:
-                sample.is_filtered = not filter_settings.is_in_range(sample.peak_amplitude)
+            # ZMĚNA: kontrola velocity_amplitude místo peak_amplitude
+            if sample.velocity_amplitude is not None:
+                sample.is_filtered = not filter_settings.is_in_range(sample.velocity_amplitude)
                 if sample.is_filtered:
                     filtered_count += 1
                     # Odmapuj filtrované samples
@@ -306,16 +307,152 @@ class MainWindow(QMainWindow):
         self.mapping_matrix._update_stats()
 
         self.status_panel.update_status(
-            f"✓ Amplitude filter aplikován: {filtered_count} samples filtrováno"
+            f"✓ Velocity amplitude filter aplikován: {filtered_count} samples filtrováno"
         )
 
+    def _find_best_frequency_position(self, sample: SampleMetadata, preferred_velocity: int,
+                                    max_semitone_distance: int = 6) -> tuple:
+        """
+        Najde nejlepší dostupnou pozici podle MIDI metadata a frekvence
+
+        Args:
+            sample: Sample s MIDI metadata a frekvencí
+            preferred_velocity: Preferovaný velocity level
+            max_semitone_distance: Maximální vzdálenost v půltónech
+
+        Returns:
+            (midi_note, velocity) nebo None pokud není dostupná pozice
+        """
+        # Použij MIDI z metadata (z MIDI editoru) nebo detekovanou MIDI notu
+        target_midi = sample.detected_midi
+        target_frequency = sample.detected_frequency
+
+        if target_midi is None or target_frequency is None:
+            return None
+
+        # Spočítej target frekvenci pro MIDI metadata
+        metadata_frequency = 440.0 * (2 ** ((target_midi - 69) / 12))
+
+        # Vygeneruj kandidáty kolem MIDI metadata
+        candidates = []
+
+        # Prohledej rozsah kolem target MIDI noty
+        search_range = range(
+            max(21, target_midi - max_semitone_distance),
+            min(109, target_midi + max_semitone_distance + 1)
+        )
+
+        for midi_note in search_range:
+            # Spočítej frekvenci pro kandidátskou MIDI notu
+            note_frequency = 440.0 * (2 ** ((midi_note - 69) / 12))
+
+            # Spočítej vzdálenosti
+            midi_distance = abs(target_midi - midi_note)  # V půltónech
+            freq_distance = abs(target_frequency - note_frequency)  # V Hz
+
+            # Zkus různé velocity levels (preferovaný první)
+            velocity_priorities = self._get_velocity_priority_list(preferred_velocity)
+
+            for velocity in velocity_priorities:
+                key = (midi_note, velocity)
+
+                # Kontrola, zda je pozice volná nebo má stejnou frekvenci v range
+                existing_sample = self.mapping_matrix.mapping.get(key)
+                position_available = self._is_position_suitable(
+                    key, existing_sample, target_frequency, sample
+                )
+
+                if position_available:
+                    # Spočítej celkový score (menší = lepší)
+                    # Prioritizuj MIDI přesnost nad frekvenční
+                    midi_penalty = midi_distance * 2.0  # MIDI vzdálenost má vyšší váhu
+                    freq_penalty = freq_distance * 0.01  # Frekvenční rozdíl má menší váhu
+                    velocity_penalty = abs(velocity - preferred_velocity) * 0.5
+
+                    score = midi_penalty + freq_penalty + velocity_penalty
+
+                    candidates.append({
+                        'midi': midi_note,
+                        'velocity': velocity,
+                        'midi_distance': midi_distance,
+                        'freq_distance': freq_distance,
+                        'velocity_distance': abs(velocity - preferred_velocity),
+                        'score': score,
+                        'has_existing': existing_sample is not None
+                    })
+
+        if not candidates:
+            return None
+
+        # Seřaď podle score (nejlepší první)
+        candidates.sort(key=lambda x: x['score'])
+
+        best = candidates[0]
+
+        # Log pro debugging
+        note_name = MidiUtils.midi_to_note_name(best['midi'])
+        logger.debug(f"Best position for {sample.filename} (MIDI {target_midi}): "
+                    f"{note_name} (MIDI {best['midi']}) V{best['velocity']}, "
+                    f"midi_dist: {best['midi_distance']}, freq_dist: {best['freq_distance']:.1f}Hz")
+
+        return (best['midi'], best['velocity'])
+
+    def _get_velocity_priority_list(self, preferred_velocity: int) -> list:
+        """Vrátí seznam velocity priorit (preferovaný první)"""
+        priorities = [preferred_velocity]
+
+        # Přidej blízké velocity levels
+        for offset in [1, -1, 2, -2, 3, -3, 4, -4]:
+            vel = preferred_velocity + offset
+            if 0 <= vel <= 7 and vel not in priorities:
+                priorities.append(vel)
+
+        return priorities
+
+    def _is_position_suitable(self, key: tuple, existing_sample, target_frequency: float,
+                            new_sample) -> bool:
+        """
+        Kontroluje, zda je pozice vhodná pro přiřazení
+
+        Args:
+            key: (midi, velocity) pozice
+            existing_sample: Existující sample na pozici nebo None
+            target_frequency: Cílová frekvence nového sample
+            new_sample: Nový sample k přiřazení
+
+        Returns:
+            True pokud je pozice dostupná nebo vhodná pro sdílení
+        """
+        if existing_sample is None:
+            return True  # Pozice je volná
+
+        # Pokud je pozice obsazená, zkontroluj kompatibilitu
+        if existing_sample.detected_frequency is None:
+            return False  # Existující sample nemá frekvenci
+
+        # Povolí sdílení pozice pokud jsou frekvence blízké (v range)
+        freq_tolerance = 20.0  # Hz tolerance pro sdílení pozice
+        freq_diff = abs(target_frequency - existing_sample.detected_frequency)
+
+        if freq_diff <= freq_tolerance:
+            logger.debug(f"Position sharing: {new_sample.filename} can share position with "
+                        f"{existing_sample.filename} (freq diff: {freq_diff:.1f}Hz)")
+            return True
+
+        return False  # Frekvence jsou příliš odlišné
+
     def on_velocity_assigned(self, filter_settings: AmplitudeFilterSettings):
-        """Obsluha přiřazení velocity levels"""
+        """Obsluha přiřazení velocity levels - ZMĚNA: používá velocity_amplitude"""
         assigned_count = 0
+        auto_mapped_count = 0
+        shared_positions = 0
+
         for sample in self.samples:
-            if sample.peak_amplitude is not None and not sample.is_filtered:
+            # ZMĚNA: kontrola velocity_amplitude místo peak_amplitude
+            if sample.velocity_amplitude is not None and not sample.is_filtered:
                 old_velocity = sample.velocity_level
-                new_velocity = filter_settings.get_velocity_level(sample.peak_amplitude)
+                # ZMĚNA: použití velocity_amplitude pro get_velocity_level
+                new_velocity = filter_settings.get_velocity_level(sample.velocity_amplitude)
 
                 if new_velocity >= 0:  # Validní velocity
                     sample.velocity_level = new_velocity
@@ -326,13 +463,38 @@ class MainWindow(QMainWindow):
                         sample.mapped = False
                         self._remove_sample_from_matrix(sample)
 
+                    # SMART AUTO-ASSIGN: Přiřazení podle MIDI metadata a frekvence
+                    if (sample.detected_midi is not None and
+                        not sample.mapped and
+                        sample.velocity_level is not None):
+
+                        best_position = self._find_best_frequency_position(
+                            sample,
+                            sample.velocity_level
+                        )
+
+                        if best_position:
+                            target_midi, target_velocity = best_position
+
+                            # Kontrola na sdílení pozice
+                            key = (target_midi, target_velocity)
+                            if key in self.mapping_matrix.mapping:
+                                shared_positions += 1
+                                logger.info(f"Sharing position {MidiUtils.midi_to_note_name(target_midi)} V{target_velocity}: "
+                                           f"{self.mapping_matrix.mapping[key].filename} + {sample.filename}")
+
+                            self.mapping_matrix.add_sample(sample, target_midi, target_velocity)
+                            auto_mapped_count += 1
+
         # Aktualizuj zobrazení
         self.sample_list.refresh_display()
         self.mapping_matrix._update_stats()
 
-        self.status_panel.update_status(
-            f"✓ Velocity assigned: {assigned_count} samples aktualizováno (0-7 levels)"
-        )
+        status_msg = f"✓ Velocity assigned (RMS 500ms): {assigned_count} samples | Auto-mapped: {auto_mapped_count} samples"
+        if shared_positions > 0:
+            status_msg += f" | Shared positions: {shared_positions}"
+
+        self.status_panel.update_status(status_msg)
 
     def _remove_sample_from_matrix(self, sample: SampleMetadata):
         """Odstraní sample z mapping matrix"""
@@ -369,7 +531,7 @@ class MainWindow(QMainWindow):
         if sample.mapped:
             status_msg += " | ✓ Namapován"
         elif sample.is_filtered:
-            status_msg += " | [FILTROVÁNO] - mimo amplitude rozsah"
+            status_msg += " | [FILTROVÁNO] - mimo velocity amplitude rozsah"
         else:
             status_msg += " | Přetáhněte do matice"
 
@@ -484,11 +646,12 @@ class MainWindow(QMainWindow):
 
         if samples:
             pitch_detected = sum(1 for s in samples if s.detected_midi is not None)
-            amplitude_detected = sum(1 for s in samples if s.peak_amplitude is not None)
+            # ZMĚNA: kontrola velocity_amplitude místo peak_amplitude
+            velocity_amplitude_detected = sum(1 for s in samples if s.velocity_amplitude is not None)
 
             self.status_panel.update_status(
                 f"✓ Analýza dokončena: {len(samples)} samples | "
-                f"Pitch: {pitch_detected}, Amplitude: {amplitude_detected}"
+                f"Pitch: {pitch_detected}, Velocity amplitude: {velocity_amplitude_detected}"
             )
 
             # Aktualizuj sample list
@@ -577,28 +740,29 @@ def main():
 
         audio_status = "✓ Audio k dispozici" if AUDIO_AVAILABLE else "⚠️ Audio není k dispozici"
 
-        QMessageBox.information(window, "Sampler Editor - CREPE Pitch + Amplitude Detection",
+        QMessageBox.information(window, "Sampler Editor - CREPE Pitch + Velocity Amplitude Detection",
                                f"Sampler Editor s pokročilou analýzou!\n\n"
                                f"Status: {audio_status}\n\n"
                                "Nové funkce v0.8:\n"
                                "• CREPE pitch detekce (state-of-the-art)\n"
-                               "• Peak amplitude analýza (10ms okna)\n"
+                               "• Velocity amplitude analýza (RMS prvních 500ms)\n"
                                "• Amplitude filtr s posuvníky\n"
                                "• Dynamické velocity mapování (0-7)\n"
                                "• Vizuální označení filtrovaných samples\n"
                                "• Rozšířené info o každém sample\n\n"
                                "Workflow:\n"
-                               "1. Vyberte vstupní složku → CREPE+amplitude analýza\n"
+                               "1. Vyberte vstupní složku → CREPE+velocity amplitude analýza\n"
                                "2. Nastavte amplitude filtr (posuvníky)\n"
                                "3. 'Apply Filter' → označí samples mimo rozsah\n"
-                               "4. 'Assign' → přiřadí velocity 0-7 podle amplitude\n"
+                               "4. 'Assign' → přiřadí velocity 0-7 podle RMS amplitude\n"
                                "5. Mapování samples do matice\n"
                                "6. Export s standardní konvencí\n\n"
-                               "Amplitude Filter:\n"
+                               "Velocity Amplitude Filter:\n"
                                "• Detekovaný rozsah se zobrazí automaticky\n"
                                "• Nastavte min/max pomocí posuvníků nebo čísel\n"
                                "• Samples mimo rozsah = šedá barva\n"
-                               "• Velocity se přiřazuje pouze valid samples\n\n"
+                               "• Velocity se přiřazuje pouze valid samples\n"
+                               "• Používá RMS prvních 500ms pro přesnější velocity\n\n"
                                "Klávesy: MEZERNÍK=přehrát | S=porovnat | D=současně | ESC=stop")
 
         sys.exit(app.exec())

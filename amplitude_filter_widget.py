@@ -1,5 +1,5 @@
 """
-amplitude_filter_widget.py - GUI komponenta pro filtraci amplitude
+amplitude_filter_widget.py - GUI komponenta pro filtraci amplitude - finální verze
 """
 
 from typing import Optional, List
@@ -12,13 +12,13 @@ from models import SampleMetadata, AmplitudeFilterSettings
 
 
 class AmplitudeFilterWidget(QGroupBox):
-    """Widget pro nastavení amplitude filtru a velocity mappingu"""
+    """Widget pro nastavení amplitude filtru a velocity mappingu - používá velocity_amplitude (RMS 500ms)"""
 
     filter_applied = Signal(object)  # AmplitudeFilterSettings
     velocity_assigned = Signal(object)  # AmplitudeFilterSettings
 
     def __init__(self):
-        super().__init__("Amplitude Filter & Velocity Assignment")
+        super().__init__("Velocity Amplitude Filter & Assignment (RMS 500ms)")
         self.filter_settings = AmplitudeFilterSettings()
         self.samples = []
         self.init_ui()
@@ -53,7 +53,7 @@ class AmplitudeFilterWidget(QGroupBox):
         slider_layout = QVBoxLayout()
 
         # Nadpis pro slider sekci
-        slider_title = QLabel("Amplitude Range")
+        slider_title = QLabel("Velocity Amplitude Range (RMS 500ms)")
         slider_title.setStyleSheet("font-weight: bold; color: #333; font-size: 12px; text-align: center;")
         slider_title.setAlignment(Qt.AlignCenter)
         slider_layout.addWidget(slider_title)
@@ -114,7 +114,7 @@ class AmplitudeFilterWidget(QGroupBox):
         info_layout = QVBoxLayout()
 
         # Nadpis pro info sekci
-        info_title = QLabel("Detection Info")
+        info_title = QLabel("Velocity Detection Info")
         info_title.setStyleSheet("font-weight: bold; color: #333; font-size: 12px; text-align: center;")
         info_title.setAlignment(Qt.AlignCenter)
         info_layout.addWidget(info_title)
@@ -200,7 +200,7 @@ class AmplitudeFilterWidget(QGroupBox):
         layout.addLayout(button_layout)
 
     def set_amplitude_data(self, samples: List[SampleMetadata], range_info: dict):
-        """Nastaví amplitude data a rozsah"""
+        """Nastaví amplitude data a rozsah - ZMĚNA: používá velocity_amplitude"""
         self.samples = samples
         self.filter_settings.update_from_range_info(range_info)
         self.update_display()
@@ -314,14 +314,15 @@ class AmplitudeFilterWidget(QGroupBox):
         self._update_valid_samples_count()
 
     def _update_valid_samples_count(self):
-        """Aktualizuje počet validních samples"""
+        """Aktualizuje počet validních samples - ZMĚNA: používá velocity_amplitude"""
         if not self.samples:
             self.filter_settings.valid_samples = 0
         else:
             valid_count = 0
             for sample in self.samples:
-                if (sample.peak_amplitude is not None and
-                        self.filter_settings.is_in_range(sample.peak_amplitude)):
+                # ZMĚNA: kontrola velocity_amplitude místo peak_amplitude
+                if (sample.velocity_amplitude is not None and
+                        self.filter_settings.is_in_range(sample.velocity_amplitude)):
                     valid_count += 1
             self.filter_settings.valid_samples = valid_count
 

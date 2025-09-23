@@ -10,18 +10,19 @@ logger = logging.getLogger(__name__)
 
 
 class AmplitudeAnalyzer:
-    """Analyzátor peak amplitude s sliding window a percentilovou filtrací"""
+    """Analyzátor RMS amplitude prvních 500ms pro velocity mapping"""
 
-    def __init__(self, window_ms: float = 10.0, percentile: float = 99.5):
+    def __init__(self, window_ms: float = 10.0, percentile: float = 99.5, velocity_duration_ms: float = 500.0):
         self.window_ms = window_ms
-        self.percentile = percentile  # Nový parametr pro percentilové filtrování
+        self.percentile = percentile
+        self.velocity_duration_ms = velocity_duration_ms  # Nový parametr pro velocity analýzu
 
     def analyze_peak_amplitude(self, waveform: np.ndarray, sr: int) -> Dict:
         """
-        Analyzuje peak amplitude v sliding window s percentilovou filtrací
+        Analyzuje amplitude s RMS prvních 500ms pro velocity mapping
 
         Returns:
-            Dict s peak_amplitude, peak_position, rms_amplitude
+            Dict s peak_amplitude (pro debug), velocity_amplitude (RMS 500ms), atd.
         """
         try:
             # Převod na mono
@@ -33,13 +34,24 @@ class AmplitudeAnalyzer:
             if len(audio) == 0:
                 return self._empty_result()
 
+            # === VELOCITY AMPLITUDE - RMS prvních 500ms ===
+            velocity_samples = int(sr * self.velocity_duration_ms / 1000.0)
+            velocity_samples = min(velocity_samples, len(audio))
+
+            if velocity_samples > 0:
+                velocity_section = audio[:velocity_samples]
+                velocity_amplitude = self._calculate_rms(velocity_section)
+            else:
+                velocity_amplitude = 0.0
+
+            # === LEGACY PEAK AMPLITUDE - pro kompatibilitu ===
             # Window size v samples
             window_size = int(sr * self.window_ms / 1000.0)
             window_size = max(1, min(window_size, len(audio)))
 
-            # Sliding window pro peak detekci
+            # Sliding window pro peak detekci (legacy)
             peak_values = []
-            hop_size = max(1, window_size // 4)  # 75% overlap
+            hop_size = max(1, window_size // 4)
 
             for i in range(0, len(audio) - window_size + 1, hop_size):
                 window = audio[i:i + window_size]
@@ -48,63 +60,78 @@ class AmplitudeAnalyzer:
                 peak_values.append(window_peak)
 
             if not peak_values:
-                # Fallback pro velmi krátké audio - použij percentil celého signálu
                 peak_amplitude = np.percentile(np.abs(audio), self.percentile)
                 peak_position = self._find_peak_position_percentile(audio, self.percentile)
             else:
-                # Globální peak ze všech oken (s percentilovou filtrací)
                 peak_amplitude = np.max(peak_values)
-
-                # Najdi pozici odpovídající percentilové hodnotě
                 peak_position = self._find_peak_position_percentile(audio, self.percentile)
 
-            # RMS pro reference
-            rms_amplitude = np.sqrt(np.mean(audio ** 2)) if len(audio) > 0 else 0.0
+            # === CELKOVÝ RMS pro reference ===
+            full_rms_amplitude = self._calculate_rms(audio)
 
-            # Peak v dB
+            # === dB konverze ===
+            velocity_amplitude_db = 20 * np.log10(velocity_amplitude) if velocity_amplitude > 1e-10 else -np.inf
             peak_db = 20 * np.log10(peak_amplitude) if peak_amplitude > 1e-10 else -np.inf
-            rms_db = 20 * np.log10(rms_amplitude) if rms_amplitude > 1e-10 else -np.inf
+            full_rms_db = 20 * np.log10(full_rms_amplitude) if full_rms_amplitude > 1e-10 else -np.inf
 
-            # Dodatečné metriky pro percentilové filtrování
-            abs_max = np.max(np.abs(audio))  # Pro srovnání s absolutním maximem
+            # === Dodatečné metriky ===
+            abs_max = np.max(np.abs(audio))
             percentile_ratio = peak_amplitude / abs_max if abs_max > 0 else 1.0
 
-            logger.debug(f"Peak amplitude (P{self.percentile}): {peak_amplitude:.6f} ({peak_db:.1f} dB), "
-                        f"Abs max: {abs_max:.6f}, Ratio: {percentile_ratio:.3f}, "
-                        f"RMS: {rms_amplitude:.6f} ({rms_db:.1f} dB)")
+            logger.debug(f"Velocity RMS (first {self.velocity_duration_ms}ms): {velocity_amplitude:.6f} ({velocity_amplitude_db:.1f} dB), "
+                        f"Peak (P{self.percentile}): {peak_amplitude:.6f} ({peak_db:.1f} dB), "
+                        f"Full RMS: {full_rms_amplitude:.6f} ({full_rms_db:.1f} dB)")
 
             return {
-                'peak_amplitude': float(peak_amplitude),
+                # HLAVNÍ HODNOTA PRO VELOCITY MAPPING
+                'velocity_amplitude': float(velocity_amplitude),  # RMS prvních 500ms
+                'velocity_amplitude_db': float(velocity_amplitude_db),
+                'velocity_duration_ms': self.velocity_duration_ms,
+
+                # LEGACY HODNOTY (pro kompatibilitu)
+                'peak_amplitude': float(peak_amplitude),  # Pro kompatibilitu s existing kódem
                 'peak_amplitude_db': float(peak_db),
-                'rms_amplitude': float(rms_amplitude),
-                'rms_amplitude_db': float(rms_db),
+                'rms_amplitude': float(full_rms_amplitude),
+                'rms_amplitude_db': float(full_rms_db),
                 'peak_position': int(peak_position),
                 'peak_position_seconds': float(peak_position / sr),
                 'window_ms': self.window_ms,
                 'analysis_windows': len(peak_values) if peak_values else 1,
-                # Nové metriky pro percentilové filtrování
+
+                # DODATEČNÉ METRIKY
                 'percentile_used': self.percentile,
                 'absolute_max': float(abs_max),
-                'percentile_ratio': float(percentile_ratio)
+                'percentile_ratio': float(percentile_ratio),
+
+                # VELOCITY SPECIFICKÉ METRIKY
+                'velocity_samples_analyzed': velocity_samples,
+                'velocity_coverage_percent': (velocity_samples / len(audio) * 100) if len(audio) > 0 else 0
             }
 
         except Exception as e:
             logger.error(f"Amplitude analysis failed: {e}")
             return self._empty_result()
 
+    def _calculate_rms(self, audio: np.ndarray) -> float:
+        """Spočítá RMS hodnotu pro audio segment"""
+        if len(audio) == 0:
+            return 0.0
+        return np.sqrt(np.mean(audio ** 2))
+
     def _find_peak_position_percentile(self, audio: np.ndarray, percentile: float) -> int:
-        """
-        Najde pozici odpovídající percentilové hodnotě
-        """
+        """Najde pozici percentilového peaku v audio signálu"""
+        if len(audio) == 0:
+            return 0
+
         abs_audio = np.abs(audio)
         percentile_value = np.percentile(abs_audio, percentile)
 
-        # Najdi první pozici, kde signál dosahuje percentilové hodnoty
-        candidates = np.where(abs_audio >= percentile_value)[0]
+        # Najdi první pozici, kde amplitude dosahuje percentile hodnoty
+        peak_indices = np.where(abs_audio >= percentile_value)[0]
 
-        if len(candidates) > 0:
-            # Vrať pozici uprostřed oblasti s vysokými hodnotami
-            return int(np.median(candidates))
+        if len(peak_indices) > 0:
+            # Vrati medián pozic pro robustnost
+            return int(np.median(peak_indices))
         else:
             # Fallback na absolutní maximum
             return int(np.argmax(abs_audio))
@@ -112,6 +139,9 @@ class AmplitudeAnalyzer:
     def _empty_result(self) -> Dict:
         """Prázdný výsledek"""
         return {
+            'velocity_amplitude': 0.0,
+            'velocity_amplitude_db': -np.inf,
+            'velocity_duration_ms': self.velocity_duration_ms,
             'peak_amplitude': 0.0,
             'peak_amplitude_db': -np.inf,
             'rms_amplitude': 0.0,
@@ -122,17 +152,19 @@ class AmplitudeAnalyzer:
             'analysis_windows': 0,
             'percentile_used': self.percentile,
             'absolute_max': 0.0,
-            'percentile_ratio': 1.0
+            'percentile_ratio': 1.0,
+            'velocity_samples_analyzed': 0,
+            'velocity_coverage_percent': 0.0
         }
 
-    def set_percentile(self, percentile: float):
-        """Nastaví percentil pro filtrování (99.0-100.0)"""
-        self.percentile = max(95.0, min(100.0, percentile))
+    def set_velocity_duration(self, duration_ms: float):
+        """Nastaví délku analyzovaného úseku pro velocity (100-2000ms)"""
+        self.velocity_duration_ms = max(100.0, min(2000.0, duration_ms))
 
     def analyze_attack_envelope(self, waveform: np.ndarray, sr: int,
                                attack_duration_ms: float = 100.0) -> Dict:
         """
-        Analyzuje attack envelope s percentilovou filtrací
+        Analyzuje attack envelope s RMS approach
         """
         try:
             # Převod na mono
@@ -146,20 +178,27 @@ class AmplitudeAnalyzer:
             attack_samples = min(attack_samples, len(audio))
 
             if attack_samples < 10:
-                return {'attack_peak': 0.0, 'attack_time': 0.0, 'attack_slope': 0.0}
+                return {'attack_peak': 0.0, 'attack_time': 0.0, 'attack_slope': 0.0, 'attack_rms': 0.0}
 
             attack_section = audio[:attack_samples]
-            abs_attack = np.abs(attack_section)
 
-            # Percentilové filtrování pro noise floor
-            noise_floor = np.percentile(abs_attack, 10)  # 10. percentil jako noise floor
+            # RMS approach pro attack
+            attack_rms = self._calculate_rms(attack_section)
+
+            # Legacy peak approach pro kompatibilitu
+            abs_attack = np.abs(attack_section)
+            noise_floor = np.percentile(abs_attack, 10)
             signal_threshold = noise_floor * 3
 
             signal_start_candidates = np.where(abs_attack > signal_threshold)[0]
             if len(signal_start_candidates) == 0:
-                # Použij percentilový peak místo absolutního maxima
                 attack_peak = np.percentile(abs_attack, self.percentile)
-                return {'attack_peak': attack_peak, 'attack_time': 0.0, 'attack_slope': 0.0}
+                return {
+                    'attack_peak': float(attack_peak),
+                    'attack_time': 0.0,
+                    'attack_slope': 0.0,
+                    'attack_rms': float(attack_rms)
+                }
 
             signal_start = signal_start_candidates[0]
 
@@ -184,6 +223,7 @@ class AmplitudeAnalyzer:
                 'attack_peak': float(peak_value),
                 'attack_time': float(attack_time),
                 'attack_slope': float(attack_slope),
+                'attack_rms': float(attack_rms),  # Nová RMS metrika
                 'signal_start_idx': int(signal_start),
                 'peak_idx': int(peak_idx),
                 'noise_floor': float(noise_floor),
@@ -192,7 +232,7 @@ class AmplitudeAnalyzer:
 
         except Exception as e:
             logger.error(f"Attack envelope analysis failed: {e}")
-            return {'attack_peak': 0.0, 'attack_time': 0.0, 'attack_slope': 0.0}
+            return {'attack_peak': 0.0, 'attack_time': 0.0, 'attack_slope': 0.0, 'attack_rms': 0.0}
 
 
 class AmplitudeRangeManager:
