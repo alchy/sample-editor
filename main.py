@@ -1,5 +1,5 @@
 """
-main.py - Hlavní aplikace Sampler Editor s drag & drop podporou a plynulým posouváním
+main.py - HlavnÃ­ aplikace Sampler Editor s pitch/amplitude detekcí
 """
 
 import sys
@@ -12,45 +12,47 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayo
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
-# Import helper modulů
-from models import SampleMetadata
+# Import helper modulÅ¯
+from models import SampleMetadata, AmplitudeFilterSettings
 from audio_analyzer import BatchAnalyzer
 from midi_utils import MidiUtils, VelocityUtils
 from export_utils import ExportManager, ExportValidator
 from drag_drop_components import DragDropMappingMatrix, DragDropSampleList
 from audio_player import AudioPlayer, AudioPlayerStatus
 from sample_editor_widget import SampleMidiEditor
+from amplitude_filter_widget import AmplitudeFilterWidget
+from amplitude_analyzer import AmplitudeRangeManager
 
-# Nastavení loggingu
+# NastavenÃ­ loggingu
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 class ControlPanel(QGroupBox):
-    """Kontejner pro ovládací prvky (horní panel)"""
+    """Kontejner pro ovlÃ¡dacÃ­ prvky (hornÃ­ panel)"""
 
     input_folder_selected = Signal(Path)
     output_folder_selected = Signal(Path)
     export_requested = Signal()
 
     def __init__(self):
-        super().__init__("Ovládání")
+        super().__init__("OvlÃ¡dÃ¡nÃ­")
         self.input_folder = None
         self.output_folder = None
         self.init_ui()
 
     def init_ui(self):
-        """Inicializace ovládacího panelu"""
+        """Inicializace ovlÃ¡dacÃ­ho panelu"""
         layout = QHBoxLayout()
         layout.setSpacing(15)
 
-        # Vstupní složka - kompaktní
-        self.btn_input_folder = QPushButton("Vstupní složka...")
+        # VstupnÃ­ sloÅ¾ka - kompaktnÃ­
+        self.btn_input_folder = QPushButton("VstupnÃ­ sloÅ¾ka...")
         self.btn_input_folder.clicked.connect(self.select_input_folder)
         self.btn_input_folder.setMaximumWidth(120)
         layout.addWidget(self.btn_input_folder)
 
-        self.input_folder_label = QLabel("Žádná složka")
+        self.input_folder_label = QLabel("Å½Ã¡dnÃ¡ sloÅ¾ka")
         self.input_folder_label.setStyleSheet("color: gray; font-style: italic; font-size: 12px;")
         self.input_folder_label.setMaximumWidth(150)
         layout.addWidget(self.input_folder_label)
@@ -62,8 +64,8 @@ class ControlPanel(QGroupBox):
         separator1.setMaximumHeight(30)
         layout.addWidget(separator1)
 
-        # Výstupní složka - kompaktní
-        self.btn_output_folder = QPushButton("Výstupní složka...")
+        # VÃ½stupnÃ­ sloÅ¾ka - kompaktnÃ­
+        self.btn_output_folder = QPushButton("VÃ½stupnÃ­ sloÅ¾ka...")
         self.btn_output_folder.clicked.connect(self.select_output_folder)
         self.btn_output_folder.setMaximumWidth(120)
         layout.addWidget(self.btn_output_folder)
@@ -115,7 +117,7 @@ class ControlPanel(QGroupBox):
 
 
 class StatusPanel(QGroupBox):
-    """Kontejner pro status informace a progress"""
+    """Kontejner pro status informace - pouze levá polovina"""
 
     def __init__(self):
         super().__init__("Status")
@@ -151,13 +153,14 @@ class StatusPanel(QGroupBox):
 
 
 class MainWindow(QMainWindow):
-    """Hlavní okno aplikace s drag & drop podporou a plynulým posouváním"""
+    """Hlavní okno aplikace s pitch/amplitude detekcí"""
 
     def __init__(self):
         super().__init__()
         self.samples = []
         self.analyzer = None
         self.export_manager = None
+        self.amplitude_range_manager = AmplitudeRangeManager()
 
         # Audio přehrávač
         self.audio_player = AudioPlayer()
@@ -170,8 +173,8 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.connect_signals()
 
-        self.setWindowTitle("Sampler Editor - Prototype v0.7 (Plynulé posouvání + MIDI Editor)")
-        self.setGeometry(100, 100, 1700, 1000)  # Větší okno pro MIDI editor
+        self.setWindowTitle("Sampler Editor - v0.8 (CREPE Pitch + Amplitude Detection)")
+        self.setGeometry(100, 100, 1700, 1000)
 
     def init_ui(self):
         """Inicializace uživatelského rozhraní"""
@@ -185,9 +188,18 @@ class MainWindow(QMainWindow):
         self.control_panel = ControlPanel()
         main_layout.addWidget(self.control_panel)
 
-        # Status panel
+        # Status a amplitude filter - horizontální rozdělení
+        status_layout = QHBoxLayout()
+
+        # Levá polovina - status panel
         self.status_panel = StatusPanel()
-        main_layout.addWidget(self.status_panel)
+        status_layout.addWidget(self.status_panel)
+
+        # Pravá polovina - amplitude filter
+        self.amplitude_filter = AmplitudeFilterWidget()
+        status_layout.addWidget(self.amplitude_filter)
+
+        main_layout.addLayout(status_layout)
 
         # Hlavní sekce - splitter pro mapping matrix a sample list
         content_splitter = QSplitter(Qt.Horizontal)
@@ -204,7 +216,7 @@ class MainWindow(QMainWindow):
         self.sample_editor = SampleMidiEditor()
         right_layout.addWidget(self.sample_editor)
 
-        # Seznam sampleů s drag podporou
+        # Seznam samples s drag podporou
         self.sample_list = DragDropSampleList()
         right_layout.addWidget(self.sample_list)
 
@@ -235,6 +247,10 @@ class MainWindow(QMainWindow):
         self.control_panel.output_folder_selected.connect(self.on_output_folder_selected)
         self.control_panel.export_requested.connect(self.export_samples)
 
+        # Amplitude filter signals
+        self.amplitude_filter.filter_applied.connect(self.on_amplitude_filter_applied)
+        self.amplitude_filter.velocity_assigned.connect(self.on_velocity_assigned)
+
         # Sample list signals
         self.sample_list.sample_selected.connect(self.on_sample_selected)
         self.sample_list.play_requested.connect(self.on_play_requested)
@@ -243,16 +259,15 @@ class MainWindow(QMainWindow):
 
         # MIDI editor signals
         self.sample_editor.midi_note_changed.connect(self.on_midi_note_changed)
-        # Zkontrolujte, jestli SampleMidiEditor má signál play_transposed_tone
         if hasattr(self.sample_editor, 'play_transposed_tone'):
-            self.sample_editor.play_transposed_tone.connect(self.on_play_transposed_tone)  # NOVÝ SIGNÁL
+            self.sample_editor.play_transposed_tone.connect(self.on_play_transposed_tone)
 
         # Mapping matrix signals - drag & drop, přehrávání a MIDI tóny
         self.mapping_matrix.sample_mapped.connect(self.on_sample_mapped)
         self.mapping_matrix.sample_unmapped.connect(self.on_sample_unmapped)
         self.mapping_matrix.sample_play_requested.connect(self.on_matrix_play_requested)
         self.mapping_matrix.midi_note_play_requested.connect(self.on_midi_note_play_requested)
-        self.mapping_matrix.sample_moved.connect(self.on_sample_moved)  # NOVÝ SIGNÁL
+        self.mapping_matrix.sample_moved.connect(self.on_sample_moved)
 
         # Audio player signals
         self.audio_player.playback_started.connect(self.on_playback_started)
@@ -262,7 +277,7 @@ class MainWindow(QMainWindow):
 
     def on_input_folder_selected(self, folder: Path):
         """Obsluha výběru vstupní složky"""
-        self.status_panel.update_status("Spouštím analýzu sampleů...")
+        self.status_panel.update_status("Spouštím analýzu samples s CREPE pitch a amplitude detekcí...")
         self.start_batch_analysis(folder)
 
     def on_output_folder_selected(self, folder: Path):
@@ -270,6 +285,69 @@ class MainWindow(QMainWindow):
         self.export_manager = ExportManager(folder)
         self.status_panel.update_status(f"Výstupní složka nastavena: {folder.name}")
         self.update_export_button_state()
+
+    def on_amplitude_filter_applied(self, filter_settings: AmplitudeFilterSettings):
+        """Obsluha aplikace amplitude filtru"""
+        # Označit samples mimo rozsah šedou barvou
+        filtered_count = 0
+        for sample in self.samples:
+            if sample.peak_amplitude is not None:
+                sample.is_filtered = not filter_settings.is_in_range(sample.peak_amplitude)
+                if sample.is_filtered:
+                    filtered_count += 1
+                    # Odmapuj filtrované samples
+                    if sample.mapped:
+                        sample.mapped = False
+                        # Odstraň z mapping matrix
+                        self._remove_sample_from_matrix(sample)
+
+        # Aktualizuj zobrazení
+        self.sample_list.refresh_display()
+        self.mapping_matrix._update_stats()
+
+        self.status_panel.update_status(
+            f"✓ Amplitude filter aplikován: {filtered_count} samples filtrováno"
+        )
+
+    def on_velocity_assigned(self, filter_settings: AmplitudeFilterSettings):
+        """Obsluha přiřazení velocity levels"""
+        assigned_count = 0
+        for sample in self.samples:
+            if sample.peak_amplitude is not None and not sample.is_filtered:
+                old_velocity = sample.velocity_level
+                new_velocity = filter_settings.get_velocity_level(sample.peak_amplitude)
+
+                if new_velocity >= 0:  # Validní velocity
+                    sample.velocity_level = new_velocity
+                    assigned_count += 1
+
+                    # Pokud se velocity změnila a sample je namapovaný, odmapuj ho
+                    if (old_velocity != new_velocity and sample.mapped):
+                        sample.mapped = False
+                        self._remove_sample_from_matrix(sample)
+
+        # Aktualizuj zobrazení
+        self.sample_list.refresh_display()
+        self.mapping_matrix._update_stats()
+
+        self.status_panel.update_status(
+            f"✓ Velocity assigned: {assigned_count} samples aktualizováno (0-7 levels)"
+        )
+
+    def _remove_sample_from_matrix(self, sample: SampleMetadata):
+        """Odstraní sample z mapping matrix"""
+        keys_to_remove = []
+        for key, mapped_sample in self.mapping_matrix.mapping.items():
+            if mapped_sample == sample:
+                keys_to_remove.append(key)
+
+        for key in keys_to_remove:
+            del self.mapping_matrix.mapping[key]
+            # Aktualizuj buňku v matici
+            if key in self.mapping_matrix.matrix_cells:
+                cell = self.mapping_matrix.matrix_cells[key]
+                cell.sample = None
+                cell._update_style()
 
     def on_sample_selected(self, sample: SampleMetadata):
         """Obsluha výběru sample ze seznamu"""
@@ -283,15 +361,17 @@ class MainWindow(QMainWindow):
         if sample.mapped:
             self.mapping_matrix.scroll_to_sample(sample)
 
-        note_name = MidiUtils.midi_to_note_name(sample.detected_midi)
-        velocity_desc = VelocityUtils.velocity_to_description(sample.velocity_level)
+        # Status s rozšířenými informacemi
+        pitch_info = sample.get_pitch_info()
+        amplitude_info = sample.get_amplitude_info()
 
-        status_msg = f"Vybrán sample: {sample.filename} | {note_name} | {velocity_desc}"
+        status_msg = f"Vybrán sample: {sample.filename} | {pitch_info} | {amplitude_info}"
         if sample.mapped:
-            status_msg += " | ✓ Namapován (matice posunuta na pozici)"
+            status_msg += " | ✓ Namapován"
+        elif sample.is_filtered:
+            status_msg += " | [FILTROVÁNO] - mimo amplitude rozsah"
         else:
             status_msg += " | Přetáhněte do matice"
-        status_msg += " | MEZERNÍK = přehrát | S = porovnat"
 
         self.status_panel.update_status(status_msg)
 
@@ -308,14 +388,13 @@ class MainWindow(QMainWindow):
         self.audio_player.compare_sample_simultaneous(sample)
 
     def on_matrix_play_requested(self, sample: SampleMetadata):
-        """Obsluha přehrávání sample z mapovací matice (klik na buňku)"""
+        """Obsluha přehrávání sample z mapovací matice"""
         self.audio_player.play_sample(sample)
-
-        note_name = MidiUtils.midi_to_note_name(sample.detected_midi)
-        self.status_panel.update_status(f"▶ Přehrává z matice: {sample.filename} ({note_name})")
+        pitch_info = sample.get_pitch_info()
+        self.status_panel.update_status(f"▶ Přehrává z matice: {sample.filename} ({pitch_info})")
 
     def on_midi_note_play_requested(self, midi_note: int):
-        """Obsluha přehrávání MIDI tónu (klik na MIDI číslo)"""
+        """Obsluha přehrávání MIDI tónu"""
         self.reference_player.play_midi_note(midi_note, duration=1.5)
         note_name = MidiUtils.midi_to_note_name(midi_note)
         self.status_panel.update_status(f"🎵 Přehrává MIDI tón: {note_name} (MIDI {midi_note})")
@@ -334,52 +413,28 @@ class MainWindow(QMainWindow):
         # Aktualizuj zobrazení v sample listu
         self.sample_list.update_samples(self.samples)
 
-        # Pokud je sample namapovaný, odmapuj ho (bude potřeba přemapovat)
+        # Pokud je sample namapovaný, odmapuj ho
         if sample.mapped:
             sample.mapped = False
-            # Najdi a odstraň z mapování
-            keys_to_remove = []
-            for key, mapped_sample in self.mapping_matrix.mapping.items():
-                if mapped_sample == sample:
-                    keys_to_remove.append(key)
-
-            for key in keys_to_remove:
-                del self.mapping_matrix.mapping[key]
-                # Aktualizuj buňku v matici pokud je zobrazená
-                if key in self.mapping_matrix.matrix_cells:
-                    cell = self.mapping_matrix.matrix_cells[key]
-                    cell.sample = None
-                    cell._update_style()
-
+            self._remove_sample_from_matrix(sample)
             self.mapping_matrix._update_stats()
             self.sample_list.refresh_display()
 
         self.status_panel.update_status(
-            f"MIDI nota změněna: {sample.filename} | {old_note} → {new_note} | "
-            f"Přemapujte sample do matice"
+            f"MIDI nota změněna: {sample.filename} | {old_note} → {new_note} | Přemapujte sample"
         )
-
-        logger.info(f"MIDI nota změněna: {sample.filename} | MIDI {old_midi} → {new_midi}")
 
     def on_sample_moved(self, sample: SampleMetadata, old_midi: int, old_velocity: int, new_midi: int, new_velocity: int):
         """Obsluha přesunu sample v mapovací matici"""
         old_note = MidiUtils.midi_to_note_name(old_midi)
         new_note = MidiUtils.midi_to_note_name(new_midi)
 
-        # Aktualizuj zobrazení v sample listu (nemusí se měnit, ale pro jistotu)
         self.sample_list.refresh_display()
-
-        # Aktualizuj export button state
         self.update_export_button_state()
 
-        # Zobraz informaci o přesunu
         self.status_panel.update_status(
-            f"✓ Sample {sample.filename} přesunut: "
-            f"{old_note} (V{old_velocity}) → {new_note} (V{new_velocity})"
+            f"✓ Sample přesunut: {sample.filename} | {old_note}(V{old_velocity}) → {new_note}(V{new_velocity})"
         )
-
-        logger.info(f"Sample moved: {sample.filename} | "
-                   f"MIDI {old_midi}:V{old_velocity} → MIDI {new_midi}:V{new_velocity}")
 
     def on_compare_started(self, message: str):
         """Obsluha spuštění srovnávacího přehrávání"""
@@ -395,7 +450,7 @@ class MainWindow(QMainWindow):
 
     def on_playback_error(self, error: str):
         """Obsluha chyby přehrávání"""
-        self.status_panel.update_status(f"❌ Chyba přehrávání: {error}")
+        self.status_panel.update_status(f"⚠ Chyba přehrávání: {error}")
         QMessageBox.warning(self, "Chyba přehrávání", error)
 
     def on_sample_mapped(self, sample: SampleMetadata, midi: int, velocity: int):
@@ -406,18 +461,11 @@ class MainWindow(QMainWindow):
         note_name = MidiUtils.midi_to_note_name(midi)
         velocity_desc = VelocityUtils.velocity_to_description(velocity)
 
-        self.status_panel.update_status(
-            f"✓ Sample {sample.filename} namapován na {note_name} ({velocity_desc})"
-        )
-
-        logger.info(f"Drag & Drop: {sample.filename} -> MIDI {midi}, Velocity {velocity}")
+        self.status_panel.update_status(f"✓ Sample namapován: {sample.filename} → {note_name}({velocity_desc})")
 
     def on_sample_unmapped(self, sample: SampleMetadata, midi: int, velocity: int):
-        """Obsluha odmapování sample (při přepsání)"""
+        """Obsluha odmapování sample"""
         self.sample_list.refresh_display()
-
-        note_name = MidiUtils.midi_to_note_name(midi)
-        logger.info(f"Sample {sample.filename} odmapován z {note_name}")
 
     def start_batch_analysis(self, folder: Path):
         """Spustí batch analýzu"""
@@ -429,19 +477,27 @@ class MainWindow(QMainWindow):
         self.analyzer.analysis_completed.connect(self.on_analysis_completed)
         self.analyzer.start()
 
-    def on_analysis_completed(self, samples: List[SampleMetadata]):
+    def on_analysis_completed(self, samples: List[SampleMetadata], range_info: dict):
         """Obsluha dokončení analýzy"""
         self.samples = samples
         self.status_panel.show_progress(False)
 
         if samples:
+            pitch_detected = sum(1 for s in samples if s.detected_midi is not None)
+            amplitude_detected = sum(1 for s in samples if s.peak_amplitude is not None)
+
             self.status_panel.update_status(
-                f"Analýza dokončena. Načteno {len(samples)} sampleů. "
-                f"Celý piano rozsah A0-C8 je dostupný pro mapování."
+                f"✓ Analýza dokončena: {len(samples)} samples | "
+                f"Pitch: {pitch_detected}, Amplitude: {amplitude_detected}"
             )
+
+            # Aktualizuj sample list
             self.sample_list.update_samples(samples)
 
-            # Auto-mapping jen několika sampleů pro demonstraci
+            # Nastavení amplitude filteru
+            self.amplitude_filter.set_amplitude_data(samples, range_info)
+
+            # Auto-mapping několika samples pro demo
             self.auto_map_samples()
         else:
             self.status_panel.update_status("Žádné samples nenalezeny nebo analýza selhala.")
@@ -449,27 +505,23 @@ class MainWindow(QMainWindow):
         self.update_export_button_state()
 
     def auto_map_samples(self):
-        """Automatické mapování prvních několika sampleů pro demonstraci"""
+        """Automatické mapování prvních několika samples"""
         mapped_count = 0
 
-        # Namapuj jen 5 sampleů automaticky kolem jejich detekovaných pozic
         for sample in self.samples[:5]:
-            if sample.analyzed and not sample.mapped:
-                # Použij detekovanou MIDI notu
+            if (sample.analyzed and not sample.mapped and not sample.is_filtered and
+                sample.detected_midi is not None and sample.velocity_level is not None):
+
                 target_midi = sample.detected_midi
                 velocity = min(sample.velocity_level, 7)
 
-                # Zkontroluj, jestli místo není obsazené
                 key = (target_midi, velocity)
                 if key not in self.mapping_matrix.mapping:
                     self.mapping_matrix.add_sample(sample, target_midi, velocity)
                     mapped_count += 1
 
         if mapped_count > 0:
-            self.status_panel.update_status(
-                f"Auto-mapováno {mapped_count} sampleů na jejich detekované pozice. "
-                f"Použijte scroll pro navigaci celým piano rozsahem."
-            )
+            self.status_panel.update_status(f"Auto-mapováno {mapped_count} samples na detekované pozice")
 
     def update_export_button_state(self):
         """Aktualizuje stav export buttonu"""
@@ -478,7 +530,7 @@ class MainWindow(QMainWindow):
         self.control_panel.enable_export(has_output and has_mapped)
 
     def export_samples(self):
-        """Export namapovaných sampleů"""
+        """Export namapovaných samples"""
         if not self.export_manager:
             QMessageBox.warning(self, "Chyba", "Není vybrána výstupní složka")
             return
@@ -491,15 +543,7 @@ class MainWindow(QMainWindow):
             # Validace před exportem
             errors = ExportValidator.validate_mapping(self.mapping_matrix.mapping)
             if errors:
-                QMessageBox.warning(self, "Chyba validace",
-                                   "Nalezeny chyby v mapování:\n\n" + "\n".join(errors[:5]))
-                return
-
-            # Kontrola konfliktů
-            conflicts = ExportValidator.check_filename_conflicts(self.mapping_matrix.mapping)
-            if conflicts:
-                QMessageBox.warning(self, "Konflikty názvů",
-                                   "Nalezeny konflikty v názvech souborů:\n\n" + "\n".join(conflicts[:3]))
+                QMessageBox.warning(self, "Chyba validace", "Nalezeny chyby:\n\n" + "\n".join(errors[:5]))
                 return
 
             # Export
@@ -507,32 +551,22 @@ class MainWindow(QMainWindow):
 
             # Zobraz výsledky
             message = (f"Export úspěšně dokončen!\n\n"
-                      f"✓ Exportováno: {export_info['exported_count']} sampleů\n"
+                      f"✓ Exportováno: {export_info['exported_count']} samples\n"
                       f"✓ Celkem souborů: {export_info['total_files']}\n"
                       f"📁 Složka: {self.export_manager.output_folder}")
 
             if export_info['failed_count'] > 0:
-                message += f"\n\n⚠️ Chyby: {export_info['failed_count']} sampleů"
-                message += f"\nDetails: {', '.join([f[0] for f in export_info['failed_files'][:3]])}"
+                message += f"\n\n⚠️ Chyby: {export_info['failed_count']} samples"
 
             QMessageBox.information(self, "Export dokončen", message)
 
-            self.status_panel.update_status(
-                f"✓ Export dokončen: {export_info['exported_count']} sampleů, "
-                f"{export_info['total_files']} souborů"
-            )
-
         except Exception as e:
-            QMessageBox.critical(self, "Chyba exportu", f"Neočekávaná chyba při exportu:\n{e}")
-            logger.error(f"Export error: {e}", exc_info=True)
+            QMessageBox.critical(self, "Chyba exportu", f"Chyba při exportu:\n{e}")
 
 
 def main():
     """Hlavní funkce aplikace"""
     app = QApplication(sys.argv)
-
-    app.setApplicationName("Sampler Editor Prototype")
-    app.setApplicationVersion("0.7.0")
 
     try:
         window = MainWindow()
@@ -543,51 +577,35 @@ def main():
 
         audio_status = "✓ Audio k dispozici" if AUDIO_AVAILABLE else "⚠️ Audio není k dispozici"
 
-        QMessageBox.information(window, "Sampler Editor - S automatickým přehráváním transponovaných tónů",
-                               f"Sampler Editor - celý piano rozsah + auto-přehrávání při transpozici!\n\n"
+        QMessageBox.information(window, "Sampler Editor - CREPE Pitch + Amplitude Detection",
+                               f"Sampler Editor s pokročilou analýzou!\n\n"
                                f"Status: {audio_status}\n\n"
-                               "Klíčové funkce:\n"
-                               "• Celý piano rozsah A0-C8 (88 kláves) v jednom zobrazení\n"
-                               "• Nejvyšší frekvence (C8) nahoře, nejnižší (A0) dole\n"
-                               "• Automatické přehrávání tónu při transpozici\n"
-                               "• Kontrola auto-přehrávání (ZAP/VYP)\n"
-                               "• Vertikální scrollování pro navigaci\n"
-                               "• Přetahování samples mezi pozicemi v matici\n\n"
-                               "MIDI Editor:\n"
-                               "• +/- = ±1 půltón s auto-přehráním\n"
-                               "• +12/-12 = ±1 oktáva s auto-přehráním\n"
-                               "• Přímý vstup MIDI čísla ve spinboxu\n"
-                               "• Tlačítko pro manuální přehrání tónu\n"
-                               "• Auto-přehrávání lze vypnout/zapnout\n\n"
-                               "Jak používat:\n"
-                               "1. Vyberte vstupní složku se samples\n"
-                               "2. Počkejte na analýzu\n"
-                               "3. Označte sample v seznamu\n"
-                               "4. Upravte MIDI notu tlačítky → automaticky se přehraje nový tón\n"
-                               "5. Testujte zvuk různými způsoby\n"
-                               "6. Přetáhněte samples do mapovací matice\n"
-                               "7. Použijte scroll pro navigaci po celém piano\n"
-                               "8. Klikněte na MIDI čísla pro referenční tóny\n"
-                               "9. Klikněte na buňky pro přehrání sampleů\n"
-                               "10. Exportujte s kompletní konvencí názvů\n\n"
-                               "Klávesové zkratky (v seznamu):\n"
-                               "• MEZERNÍK = přehrát sample\n"
-                               "• S = srovnávací (tón → pauza → sample)\n"
-                               "• D = současné (tón + sample mix)\n"
-                               "• ESC = zastavit přehrávání\n\n"
-                               "Mapovací matice:\n"
-                               "• Levý klik MIDI čísla = referenční tón\n"
-                               "• Levý klik buňky = přehrát sample\n"
-                               "• Pravý klik buňky = zobrazit info\n"
-                               "• Tažení buňky = přesun sample\n\n"
-                               "Export: Kompletní konvence mXXX-velY-fZZ.wav")
+                               "Nové funkce v0.8:\n"
+                               "• CREPE pitch detekce (state-of-the-art)\n"
+                               "• Peak amplitude analýza (10ms okna)\n"
+                               "• Amplitude filtr s posuvníky\n"
+                               "• Dynamické velocity mapování (0-7)\n"
+                               "• Vizuální označení filtrovaných samples\n"
+                               "• Rozšířené info o každém sample\n\n"
+                               "Workflow:\n"
+                               "1. Vyberte vstupní složku → CREPE+amplitude analýza\n"
+                               "2. Nastavte amplitude filtr (posuvníky)\n"
+                               "3. 'Apply Filter' → označí samples mimo rozsah\n"
+                               "4. 'Assign' → přiřadí velocity 0-7 podle amplitude\n"
+                               "5. Mapování samples do matice\n"
+                               "6. Export s standardní konvencí\n\n"
+                               "Amplitude Filter:\n"
+                               "• Detekovaný rozsah se zobrazí automaticky\n"
+                               "• Nastavte min/max pomocí posuvníků nebo čísel\n"
+                               "• Samples mimo rozsah = šedá barva\n"
+                               "• Velocity se přiřazuje pouze valid samples\n\n"
+                               "Klávesy: MEZERNÍK=přehrát | S=porovnat | D=současně | ESC=stop")
 
         sys.exit(app.exec())
 
     except Exception as e:
-        logger.error(f"Chyba při spuštění aplikace: {e}", exc_info=True)
-        QMessageBox.critical(None, "Kritická chyba",
-                           f"Aplikace se nepodařilo spustit:\n{e}")
+        logger.error(f"Chyba aplikace: {e}", exc_info=True)
+        QMessageBox.critical(None, "Kritická chyba", f"Aplikace selhala:\n{e}")
         sys.exit(1)
 
 

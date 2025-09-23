@@ -1,4 +1,5 @@
-# Sampler Editor - Requirements
+# Sampler Editor - Requirements v0.8 (CREPE + Amplitude Detection)
+
 # GUI Framework
 PySide6>=6.6.0
 
@@ -8,14 +9,12 @@ soundfile>=0.12.1
 sounddevice>=0.4.6
 scipy>=1.10.0
 
-# Pitch detection
+# CREPE pitch detection (primary)
 crepe>=0.0.13
 tensorflow>=2.13.0
 
-# Backup pitch detection (optional)
+# Backup pitch detection
 aubio>=0.4.9
-
-# Audio analysis
 librosa>=0.10.1
 
 # File handling and utilities
@@ -25,18 +24,26 @@ pathlib2>=2.3.7; python_version<"3.4"
 pytest>=7.4.0
 pytest-qt>=4.2.0
 
-# Optional: For advanced audio features
-# resampy>=0.4.2
-# numba>=0.57.0
-
-# Note: TensorFlow comes with CREPE but might need specific versions
-# For CPU-only (lighter): tensorflow-cpu>=2.13.0
-# For GPU support: tensorflow-gpu>=2.13.0 (if you have CUDA setup)
-
 # Installation notes:
 # 1. Install with: pip install -r requirements.txt
-# 2. For development: pip install -r requirements.txt -e .
-# 3. If you encounter TensorFlow issues, try:
-#    pip install tensorflow==2.13.0 --no-deps
-#    pip install crepe --no-deps
-# 4. For Apple Silicon Macs, use: pip install tensorflow-macos tensorflow-metal
+# 2. For CPU-only TensorFlow (lighter):
+#    pip install tensorflow-cpu>=2.13.0 instead of tensorflow
+# 3. If you encounter TensorFlow/CREPE issues, try:
+#    pip install --upgrade tensorflow==2.13.0
+#    pip install --upgrade crepe==0.0.13
+# 4. For Apple Silicon Macs:
+#    pip install tensorflow-macos tensorflow-metal
+# 5. CREPE requires TensorFlow but provides state-of-the-art pitch detection
+# 6. Librosa and aubio serve as backup methods if CREPE fails
+# 7. Minimum Python version: 3.8+
+
+# Performance recommendations:
+# - Use tensorflow-cpu for faster startup if no GPU available
+# - CREPE 'medium' model provides good balance of speed/accuracy
+# - For production: consider tensorflow-gpu if CUDA is available
+# - Memory usage: ~1-2GB for TensorFlow + CREPE models
+
+# Audio format support:
+# - soundfile: WAV, FLAC, AIFF (fast, reliable)
+# - librosa: MP3, OGG, M4A (slower but more formats)
+# - Both libraries complement each other for maximum compatibility

@@ -1,88 +1,285 @@
 """
-audio_analyzer.py - Worker thread pro batch analýzu audio sampleů
+audio_analyzer.py - Worker thread pro batch analÃ½zu s CREPE a amplitude detekcí
 """
 
+import sys
 from pathlib import Path
 from typing import List
 import logging
+import numpy as np
 from PySide6.QtCore import QThread, Signal
 
-from models import SampleMetadata
+from models import SampleMetadata, AnalysisProgress
+from pitch_detector import PitchDetector
+
+# Debug import pro amplitude_analyzer
+try:
+    from amplitude_analyzer import AmplitudeAnalyzer, AmplitudeRangeManager
+    logger = logging.getLogger(__name__)
+    logger.info("Successfully imported AmplitudeAnalyzer and AmplitudeRangeManager")
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.error(f"Failed to import from amplitude_analyzer: {e}")
+
+    # Vytvořme mock třídy pro fallback
+    class AmplitudeAnalyzer:
+        def __init__(self, window_ms=10.0):
+            self.window_ms = window_ms
+
+        def analyze_peak_amplitude(self, waveform, sr):
+            # Fallback implementace
+            if len(waveform.shape) > 1:
+                audio = np.mean(waveform, axis=1)
+            else:
+                audio = waveform.copy()
+
+            peak_amplitude = float(np.max(np.abs(audio))) if len(audio) > 0 else 0.0
+
+            return {
+                'peak_amplitude': peak_amplitude,
+                'peak_amplitude_db': 20 * np.log10(peak_amplitude) if peak_amplitude > 1e-10 else -np.inf,
+                'rms_amplitude': float(np.sqrt(np.mean(audio ** 2))) if len(audio) > 0 else 0.0,
+                'rms_amplitude_db': -60.0,
+                'peak_position': int(np.argmax(np.abs(audio))) if len(audio) > 0 else 0,
+                'peak_position_seconds': 0.0,
+                'window_ms': self.window_ms,
+                'analysis_windows': 1
+            }
+
+        def analyze_attack_envelope(self, waveform, sr):
+            return {'attack_peak': 0.0, 'attack_time': 0.0, 'attack_slope': 0.0}
+
+    class AmplitudeRangeManager:
+        def __init__(self):
+            self.global_min = None
+            self.global_max = None
+            self.all_peak_values = []
+
+        def add_sample_amplitude(self, peak_amplitude):
+            if peak_amplitude > 0:
+                self.all_peak_values.append(peak_amplitude)
+                if self.global_min is None or peak_amplitude < self.global_min:
+                    self.global_min = peak_amplitude
+                if self.global_max is None or peak_amplitude > self.global_max:
+                    self.global_max = peak_amplitude
+
+        def get_range_info(self):
+            if not self.all_peak_values:
+                return {'min': 0.0, 'max': 1.0, 'count': 0, 'mean': 0.0, 'std': 0.0, 'percentile_5': 0.0, 'percentile_95': 1.0}
+
+            values = np.array(self.all_peak_values)
+            return {
+                'min': float(self.global_min) if self.global_min else 0.0,
+                'max': float(self.global_max) if self.global_max else 1.0,
+                'count': len(self.all_peak_values),
+                'mean': float(np.mean(values)),
+                'std': float(np.std(values)),
+                'percentile_5': float(np.percentile(values, 5)),
+                'percentile_95': float(np.percentile(values, 95))
+            }
+
+        def reset(self):
+            self.global_min = None
+            self.global_max = None
+            self.all_peak_values.clear()
 
 logger = logging.getLogger(__name__)
 
+# Audio knihovny
+try:
+    import soundfile as sf
+    SOUNDFILE_AVAILABLE = True
+except ImportError:
+    SOUNDFILE_AVAILABLE = False
+    logger.warning("soundfile not available")
+
+try:
+    import librosa
+    LIBROSA_AVAILABLE = True
+except ImportError:
+    LIBROSA_AVAILABLE = False
+    logger.warning("librosa not available")
+
 
 class BatchAnalyzer(QThread):
-    """Worker thread pro batch analýzu sampleů"""
+    """Worker thread pro batch analÃ½zu s pitch a amplitude detekcí"""
 
     progress_updated = Signal(int, str)  # progress percentage, message
-    analysis_completed = Signal(list)  # list of SampleMetadata
+    analysis_completed = Signal(list, dict)  # list of SampleMetadata, amplitude range info
 
     def __init__(self, input_folder: Path):
         super().__init__()
         self.input_folder = input_folder
         self.samples = []
-        self.supported_extensions = ['*.wav', '*.WAV', '*.flac', '*.FLAC', '*.aiff', '*.AIFF']
+        self.supported_extensions = ['*.wav', '*.WAV', '*.flac', '*.FLAC', '*.aiff', '*.AIFF', '*.mp3', '*.MP3']
+
+        # Analyzátory
+        self.pitch_detector = PitchDetector()
+        self.amplitude_analyzer = AmplitudeAnalyzer(window_ms=10.0)
+        self.amplitude_range_manager = AmplitudeRangeManager()
+
+        # Progress tracking
+        self.progress = None
 
     def run(self):
-        """Spustí batch analýzu"""
+        """SpustÃ­ batch analÃ½zu"""
         try:
             # Najdi audio soubory
             audio_files = []
             for ext in self.supported_extensions:
                 audio_files.extend(list(self.input_folder.glob(ext)))
 
-            self.progress_updated.emit(0, f"Nalezeno {len(audio_files)} audio souborů")
-
             if not audio_files:
-                self.analysis_completed.emit([])
+                self.progress_updated.emit(0, "Žádné audio soubory nenalezeny")
+                self.analysis_completed.emit([], {})
                 return
 
+            # Inicializace progress
+            self.progress = AnalysisProgress(len(audio_files))
+            self.progress_updated.emit(0, f"Nalezeno {len(audio_files)} audio souborů")
+
+            # Reset amplitude range manager
+            self.amplitude_range_manager.reset()
+
             self.samples = []
+
             for i, filepath in enumerate(audio_files):
-                sample = self._analyze_single_sample(filepath)
+                try:
+                    # Aktualizace progress
+                    self.progress.update(filepath.name)
+                    progress_percent = self.progress.get_progress_percent()
+                    self.progress_updated.emit(progress_percent, self.progress.get_status_message())
 
-                if sample:
-                    self.samples.append(sample)
+                    # Analyzuj sample
+                    sample = self._analyze_single_sample(filepath)
 
-                progress = int((i + 1) / len(audio_files) * 100)
-                self.progress_updated.emit(progress, f"Analyzován: {filepath.name}")
+                    if sample:
+                        self.samples.append(sample)
 
-            self.analysis_completed.emit(self.samples)
+                        # Přidej amplitude do range manageru
+                        if sample.peak_amplitude is not None:
+                            self.amplitude_range_manager.add_sample_amplitude(sample.peak_amplitude)
+
+                except Exception as e:
+                    error_msg = f"Error analyzing {filepath.name}: {str(e)}"
+                    logger.error(error_msg)
+                    self.progress.add_error(filepath.name, str(e))
+
+            # Finální progress update
+            final_message = self.progress.get_status_message()
+            self.progress_updated.emit(100, final_message)
+
+            # Získej amplitude range info
+            range_info = self.amplitude_range_manager.get_range_info()
+
+            logger.info(f"Analysis completed: {len(self.samples)} samples successfully analyzed")
+            logger.info(f"Amplitude range: {range_info['min']:.6f} - {range_info['max']:.6f}")
+
+            # Emit výsledky
+            self.analysis_completed.emit(self.samples, range_info)
 
         except Exception as e:
-            logger.error(f"Chyba při batch analýze: {e}")
-            self.analysis_completed.emit([])
+            logger.error(f"Chyba pÅ™i batch analÃ½ze: {e}")
+            self.analysis_completed.emit([], {})
 
     def _analyze_single_sample(self, filepath: Path) -> SampleMetadata:
-        """Analyzuje jeden sample - zatím simulované hodnoty"""
+        """Analyzuje jeden sample - pitch + amplitude"""
         sample = SampleMetadata(filepath)
 
         try:
-            # TODO: Zde bude skutečná analýza s CREPE a velocity detektorem
-            # Pro prototyp - simulované hodnoty
-            import random
+            # Načti audio soubor
+            waveform, sr = self._load_audio_file(filepath)
 
-            sample.detected_midi = random.randint(21, 108)  # Piano rozsah
-            sample.detected_frequency = 440.0 * (2 ** ((sample.detected_midi - 69) / 12))
-            sample.pitch_confidence = random.uniform(0.5, 0.95)
-            sample.velocity_level = random.randint(0, 7)
-            sample.rms_db = random.uniform(-60, -20)
-            sample.duration = random.uniform(2, 15)
-            sample.sample_rate = random.choice([44100, 48000])
-            sample.channels = random.choice([1, 2])
+            if waveform is None or len(waveform) == 0:
+                logger.warning(f"Could not load audio from {filepath}")
+                return None
+
+            # Základní audio info
+            sample.sample_rate = sr
+            sample.channels = waveform.shape[1] if len(waveform.shape) > 1 else 1
+            sample.duration = len(waveform) / sr
+
+            logger.debug(f"Loaded audio: {sample.filename}, "
+                        f"duration: {sample.duration:.2f}s, "
+                        f"sr: {sr}, channels: {sample.channels}")
+
+            # Pitch detekce
+            pitch_result = self.pitch_detector.detect_pitch(waveform, sr)
+
+            sample.detected_frequency = pitch_result.get('frequency')
+            sample.detected_midi = pitch_result.get('midi_note')
+            sample.pitch_confidence = pitch_result.get('confidence', 0.0)
+            sample.pitch_method = pitch_result.get('method', 'unknown')
+
+            # Amplitude analýza
+            amplitude_result = self.amplitude_analyzer.analyze_peak_amplitude(waveform, sr)
+
+            sample.peak_amplitude = amplitude_result.get('peak_amplitude')
+            sample.peak_amplitude_db = amplitude_result.get('peak_amplitude_db')
+            sample.rms_amplitude = amplitude_result.get('rms_amplitude')
+            sample.rms_amplitude_db = amplitude_result.get('rms_amplitude_db')
+            sample.peak_position = amplitude_result.get('peak_position')
+            sample.peak_position_seconds = amplitude_result.get('peak_position_seconds')
+
+            # Attack envelope analýza
+            attack_result = self.amplitude_analyzer.analyze_attack_envelope(waveform, sr)
+            sample.attack_peak = attack_result.get('attack_peak')
+            sample.attack_time = attack_result.get('attack_time')
+            sample.attack_slope = attack_result.get('attack_slope')
+
+            # Označit jako analyzovaný
             sample.analyzed = True
 
-            logger.info(f"Analyzován sample: {sample.filename} - MIDI {sample.detected_midi}")
+            # Log výsledků
+            pitch_info = f"MIDI {sample.detected_midi}" if sample.detected_midi else "No pitch"
+            amplitude_info = f"Peak: {sample.peak_amplitude:.6f}" if sample.peak_amplitude else "No amplitude"
+
+            logger.info(f"✓ {sample.filename}: {pitch_info}, {amplitude_info} "
+                       f"[{sample.pitch_method}, conf: {sample.pitch_confidence:.2f}]")
 
             return sample
 
         except Exception as e:
-            logger.error(f"Chyba při analýze {filepath}: {e}")
+            logger.error(f"Chyba pÅ™i analÃ½ze {filepath}: {e}")
             return None
 
-    def _real_audio_analysis(self, filepath: Path) -> SampleMetadata:
-        """Skutečná audio analýza - pro budoucí implementaci"""
-        # Zde bude integrace s CrepeHybridDetector a AdvancedVelocityAnalyzer
-        # z vašich původních kódů
-        pass
+    def _load_audio_file(self, filepath: Path) -> tuple:
+        """Načte audio soubor pomocí dostupných knihoven"""
+
+        # Pokus o soundfile (nejrychlejší)
+        if SOUNDFILE_AVAILABLE:
+            try:
+                waveform, sr = sf.read(str(filepath))
+                return waveform, sr
+            except Exception as e:
+                logger.debug(f"Soundfile failed for {filepath.name}: {e}")
+
+        # Pokus o librosa (spolehlivější pro různé formáty)
+        if LIBROSA_AVAILABLE:
+            try:
+                waveform, sr = librosa.load(str(filepath), sr=None)
+                # librosa vrací mono, převedeme na správný tvar
+                if len(waveform.shape) == 1:
+                    waveform = waveform.reshape(-1, 1)
+                return waveform, sr
+            except Exception as e:
+                logger.debug(f"Librosa failed for {filepath.name}: {e}")
+
+        logger.error(f"Žádná audio knihovna nemůže načíst {filepath.name}")
+        return None, None
+
+    def stop_analysis(self):
+        """Zastaví analýzu (pro budoucí implementaci)"""
+        self.terminate()
+
+    def get_supported_formats(self) -> List[str]:
+        """Vrátí seznam podporovaných formátů"""
+        formats = []
+
+        if SOUNDFILE_AVAILABLE:
+            formats.extend(['WAV', 'FLAC', 'AIFF'])
+
+        if LIBROSA_AVAILABLE:
+            formats.extend(['MP3', 'OGG', 'M4A'])
+
+        return list(set(formats))  # Odstraň duplicity
