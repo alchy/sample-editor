@@ -1,10 +1,10 @@
 """
-export_utils.py - Utility funkce pro export sampleů
+export_utils.py - Utility funkce pro export samples - OPRAVENÁ VERZE
 """
 
 import shutil
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional, Union
 import logging
 
 from models import SampleMetadata
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class ExportManager:
-    """Správce exportu namapovaných sampleů"""
+    """Správce exportu namapovaných samples - OPRAVENÁ VERZE."""
 
     def __init__(self, output_folder: Path):
         self.output_folder = Path(output_folder)
@@ -23,9 +23,9 @@ class ExportManager:
             (48000, 'f48')
         ]
 
-    def export_mapped_samples(self, mapping: Dict[Tuple[int, int], SampleMetadata]) -> Dict:
+    def export_mapped_samples(self, mapping: Dict[Tuple[int, int], SampleMetadata]) -> Dict[str, Union[int, List[str], List[Tuple[str, str]]]]:
         """
-        Exportuje všechny namapované samples
+        Exportuje všechny namapované samples.
 
         Args:
             mapping: Dictionary (midi_note, velocity) -> SampleMetadata
@@ -36,8 +36,16 @@ class ExportManager:
         if not mapping:
             raise ValueError("Žádné samples k exportu")
 
+        # OPRAVA: Validace před exportem
+        validation_errors = ExportValidator.validate_mapping(mapping)
+        if validation_errors:
+            raise ValueError(f"Validační chyby: {'; '.join(validation_errors[:3])}")
+
         # Vytvoř výstupní složku pokud neexistuje
-        self.output_folder.mkdir(parents=True, exist_ok=True)
+        try:
+            self.output_folder.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise ValueError(f"Nelze vytvořit výstupní složku: {e}")
 
         export_info = {
             'exported_count': 0,
@@ -47,11 +55,28 @@ class ExportManager:
             'total_files': 0
         }
 
-        for (midi_note, velocity), sample in mapping.items():
+        # OPRAVA: Bezpečná iterace přes mapping
+        for key, sample in list(mapping.items()):
+            if not isinstance(key, tuple) or len(key) != 2:
+                logger.error(f"Neplatný klíč v mapping: {key}")
+                export_info['failed_files'].append((str(key), "Neplatný formát klíče"))
+                export_info['failed_count'] += 1
+                continue
+
+            midi_note, velocity = key
+
             try:
+                # OPRAVA: Dodatečná validace sample
+                if not self._validate_single_sample(sample, midi_note, velocity):
+                    export_info['failed_files'].append((sample.filename, "Sample neprošel validací"))
+                    export_info['failed_count'] += 1
+                    continue
+
                 exported_files = self._export_single_sample(sample, midi_note, velocity)
                 export_info['exported_files'].extend(exported_files)
                 export_info['exported_count'] += 1
+
+                logger.info(f"✓ Exportován: {sample.filename} -> MIDI {midi_note}, V{velocity}")
 
             except Exception as e:
                 logger.error(f"Chyba při exportu {sample.filename}: {e}")
@@ -65,9 +90,32 @@ class ExportManager:
 
         return export_info
 
+    def _validate_single_sample(self, sample: SampleMetadata, midi_note: int, velocity: int) -> bool:
+        """Validuje jednotlivý sample před exportem."""
+        if not sample:
+            return False
+
+        if not isinstance(sample, SampleMetadata):
+            logger.error(f"Sample není instance SampleMetadata: {type(sample)}")
+            return False
+
+        if not sample.filepath or not sample.filepath.exists():
+            logger.error(f"Soubor neexistuje: {sample.filepath}")
+            return False
+
+        if not MidiUtils.is_piano_range(midi_note):
+            logger.error(f"MIDI nota {midi_note} není v piano rozsahu")
+            return False
+
+        if not (0 <= velocity <= 7):
+            logger.error(f"Velocity {velocity} není v rozsahu 0-7")
+            return False
+
+        return True
+
     def _export_single_sample(self, sample: SampleMetadata, midi_note: int, velocity: int) -> List[Path]:
         """
-        Exportuje jeden sample do všech formátů
+        Exportuje jeden sample do všech formátů.
 
         Returns:
             Seznam cest k exportovaným souborům
@@ -75,20 +123,46 @@ class ExportManager:
         exported_files = []
 
         for sample_rate, sr_suffix in self.export_formats:
-            output_filename = MidiUtils.generate_filename(midi_note, velocity, sample_rate)
-            output_path = self.output_folder / output_filename
+            try:
+                output_filename = MidiUtils.generate_filename(midi_note, velocity, sample_rate)
+                output_path = self.output_folder / output_filename
 
-            # Pro prototyp - jen kopírování
-            # V budoucnu zde bude sample rate konverze a případná pitch korekce
-            shutil.copy2(sample.filepath, output_path)
+                # OPRAVA: Kontrola existence zdrojového souboru
+                if not sample.filepath.exists():
+                    raise FileNotFoundError(f"Zdrojový soubor neexistuje: {sample.filepath}")
 
-            exported_files.append(output_path)
-            logger.debug(f"Exportován: {output_filename}")
+                # OPRAVA: Bezpečné kopírování s error handlingem
+                try:
+                    # Pro prototyp - jen kopírování
+                    # V budoucnu zde bude sample rate konverze a případná pitch korekce
+                    shutil.copy2(sample.filepath, output_path)
+
+                    # OPRAVA: Verifikace úspěšného kopírování
+                    if not output_path.exists():
+                        raise RuntimeError(f"Kopírování selhalo - výstupní soubor neexistuje")
+
+                    # OPRAVA: Kontrola velikosti souboru
+                    if output_path.stat().st_size == 0:
+                        raise RuntimeError(f"Výstupní soubor je prázdný")
+
+                    exported_files.append(output_path)
+                    logger.debug(f"Exportován: {output_filename}")
+
+                except (OSError, IOError) as e:
+                    raise RuntimeError(f"Chyba při kopírování souboru: {e}")
+
+            except Exception as e:
+                logger.error(f"Chyba při exportu do {sr_suffix}: {e}")
+                # Continue with other formats even if one fails
+                continue
+
+        if not exported_files:
+            raise RuntimeError("Nepodařilo se exportovat žádný formát")
 
         return exported_files
 
     def validate_export_folder(self) -> bool:
-        """Ověří, zda je výstupní složka dostupná pro zápis"""
+        """Ověří, zda je výstupní složka dostupná pro zápis."""
         try:
             self.output_folder.mkdir(parents=True, exist_ok=True)
 
@@ -105,34 +179,58 @@ class ExportManager:
 
     def get_export_preview(self, mapping: Dict[Tuple[int, int], SampleMetadata]) -> List[Dict]:
         """
-        Vrátí náhled toho, co bude exportováno
+        Vrátí náhled toho, co bude exportováno.
 
         Returns:
-            Seznam dictonary s informacemi o jednotlivých exportech
+            Seznam dictionary s informacemi o jednotlivých exportech
         """
         preview = []
 
-        for (midi_note, velocity), sample in mapping.items():
-            note_name = MidiUtils.midi_to_note_name(midi_note)
+        # OPRAVA: Bezpečná iterace přes mapping
+        for key, sample in mapping.items():
+            if not isinstance(key, tuple) or len(key) != 2:
+                continue
 
-            for sample_rate, sr_suffix in self.export_formats:
-                filename = MidiUtils.generate_filename(midi_note, velocity, sample_rate)
+            midi_note, velocity = key
 
+            if not self._validate_single_sample(sample, midi_note, velocity):
+                continue
+
+            try:
+                note_name = MidiUtils.midi_to_note_name(midi_note)
+
+                for sample_rate, sr_suffix in self.export_formats:
+                    filename = MidiUtils.generate_filename(midi_note, velocity, sample_rate)
+
+                    preview.append({
+                        'source_file': sample.filename,
+                        'output_file': filename,
+                        'midi_note': midi_note,
+                        'note_name': note_name,
+                        'velocity': velocity,
+                        'sample_rate': sample_rate,
+                        'output_path': self.output_folder / filename,
+                        'valid': True
+                    })
+            except Exception as e:
+                logger.error(f"Chyba při vytváření preview pro {sample.filename}: {e}")
                 preview.append({
                     'source_file': sample.filename,
-                    'output_file': filename,
+                    'output_file': 'ERROR',
                     'midi_note': midi_note,
-                    'note_name': note_name,
+                    'note_name': 'ERROR',
                     'velocity': velocity,
-                    'sample_rate': sample_rate,
-                    'output_path': self.output_folder / filename
+                    'sample_rate': 0,
+                    'output_path': None,
+                    'valid': False,
+                    'error': str(e)
                 })
 
         return preview
 
     def cleanup_previous_exports(self, pattern: str = "m*-vel*-f*.wav") -> int:
         """
-        Vyčistí předchozí exporty podle pattern
+        Vyčistí předchozí exporty podle pattern.
 
         Returns:
             Počet smazaných souborů
@@ -142,9 +240,12 @@ class ExportManager:
         try:
             for file_path in self.output_folder.glob(pattern):
                 if file_path.is_file():
-                    file_path.unlink()
-                    deleted_count += 1
-                    logger.debug(f"Smazán starý export: {file_path.name}")
+                    try:
+                        file_path.unlink()
+                        deleted_count += 1
+                        logger.debug(f"Smazán starý export: {file_path.name}")
+                    except Exception as e:
+                        logger.warning(f"Nelze smazat {file_path.name}: {e}")
 
             logger.info(f"Vyčištěno {deleted_count} starých exportů")
 
@@ -155,12 +256,12 @@ class ExportManager:
 
 
 class ExportValidator:
-    """Validátor pro export operace"""
+    """Validátor pro export operace - OPRAVENÁ VERZE."""
 
     @staticmethod
     def validate_mapping(mapping: Dict[Tuple[int, int], SampleMetadata]) -> List[str]:
         """
-        Validuje mapování před exportem
+        Validuje mapování před exportem.
 
         Returns:
             Seznam chybových zpráv (prázdný seznam = OK)
@@ -171,29 +272,49 @@ class ExportValidator:
             errors.append("Žádné samples nejsou namapované")
             return errors
 
-        for (midi_note, velocity), sample in mapping.items():
-            # Validace MIDI rozsahu
-            if not MidiUtils.is_piano_range(midi_note):
-                errors.append(f"MIDI nota {midi_note} není v piano rozsahu")
+        if not isinstance(mapping, dict):
+            errors.append("Mapping není dictionary")
+            return errors
 
-            # Validace velocity
-            if not (0 <= velocity <= 7):
-                errors.append(f"Velocity {velocity} není v platném rozsahu 0-7")
+        for key, sample in mapping.items():
+            try:
+                # OPRAVA: Validace klíče
+                if not isinstance(key, tuple) or len(key) != 2:
+                    errors.append(f"Neplatný klíč v mapping: {key}")
+                    continue
 
-            # Validace existence souboru
-            if not sample.filepath.exists():
-                errors.append(f"Soubor {sample.filename} neexistuje")
+                midi_note, velocity = key
 
-            # Validace analýzy
-            if not sample.analyzed:
-                errors.append(f"Sample {sample.filename} nebyl analyzován")
+                # Validace MIDI rozsahu
+                if not isinstance(midi_note, int) or not MidiUtils.is_piano_range(midi_note):
+                    errors.append(f"MIDI nota {midi_note} není v piano rozsahu")
+
+                # Validace velocity
+                if not isinstance(velocity, int) or not (0 <= velocity <= 7):
+                    errors.append(f"Velocity {velocity} není v rozsahu 0-7")
+
+                # OPRAVA: Validace sample objektu
+                if not isinstance(sample, SampleMetadata):
+                    errors.append(f"Sample pro MIDI {midi_note}, V{velocity} není SampleMetadata instance")
+                    continue
+
+                # Validace existence souboru
+                if not sample.filepath or not sample.filepath.exists():
+                    errors.append(f"Soubor {sample.filename} neexistuje")
+
+                # Validace analýzy
+                if not sample.analyzed:
+                    errors.append(f"Sample {sample.filename} nebyl analyzován")
+
+            except Exception as e:
+                errors.append(f"Chyba při validaci: {e}")
 
         return errors
 
     @staticmethod
     def check_filename_conflicts(mapping: Dict[Tuple[int, int], SampleMetadata]) -> List[str]:
         """
-        Zkontroluje konflikty v názvech výstupních souborů
+        Zkontroluje konflikty v názvech výstupních souborů.
 
         Returns:
             Seznam konfliktů
@@ -201,16 +322,61 @@ class ExportValidator:
         conflicts = []
         filename_map = {}
 
-        for (midi_note, velocity), sample in mapping.items():
-            for sample_rate, sr_suffix in [(44100, 'f44'), (48000, 'f48')]:
-                filename = MidiUtils.generate_filename(midi_note, velocity, sample_rate)
+        for key, sample in mapping.items():
+            if not isinstance(key, tuple) or len(key) != 2:
+                continue
 
-                if filename in filename_map:
-                    conflicts.append(
-                        f"Konflikt názvu '{filename}': "
-                        f"{filename_map[filename].filename} vs {sample.filename}"
-                    )
-                else:
-                    filename_map[filename] = sample
+            midi_note, velocity = key
+
+            try:
+                for sample_rate, sr_suffix in [(44100, 'f44'), (48000, 'f48')]:
+                    filename = MidiUtils.generate_filename(midi_note, velocity, sample_rate)
+
+                    if filename in filename_map:
+                        conflicts.append(
+                            f"Konflikt názvu '{filename}': "
+                            f"{filename_map[filename].filename} vs {sample.filename}"
+                        )
+                    else:
+                        filename_map[filename] = sample
+            except Exception as e:
+                conflicts.append(f"Chyba při kontrole konfliktů pro {sample.filename}: {e}")
 
         return conflicts
+
+    @staticmethod
+    def validate_export_folder(output_folder: Path) -> List[str]:
+        """
+        Validuje výstupní složku.
+
+        Returns:
+            Seznam chyb (prázdný = OK)
+        """
+        errors = []
+
+        try:
+            if not output_folder:
+                errors.append("Výstupní složka není nastavena")
+                return errors
+
+            output_folder = Path(output_folder)
+
+            # Pokus o vytvoření složky
+            try:
+                output_folder.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                errors.append(f"Nelze vytvořit výstupní složku: {e}")
+                return errors
+
+            # Test zápisu
+            try:
+                test_file = output_folder / "test_write.tmp"
+                test_file.write_text("test")
+                test_file.unlink()
+            except Exception as e:
+                errors.append(f"Nelze zapisovat do výstupní složky: {e}")
+
+        except Exception as e:
+            errors.append(f"Chyba při validaci výstupní složky: {e}")
+
+        return errors

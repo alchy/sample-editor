@@ -4,28 +4,64 @@ amplitude_filter_widget.py - GUI komponenta pro filtraci amplitude - finální v
 
 from typing import Optional, List
 from PySide6.QtWidgets import (QGroupBox, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QSlider, QDoubleSpinBox, QFrame, QProgressBar)
+                               QPushButton, QSlider, QDoubleSpinBox, QFrame)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
-from models import SampleMetadata, AmplitudeFilterSettings
+from models import SampleMetadata
+
+
+class AmplitudeFilterSettings:
+    """Model pro nastavení amplitude filtru (zjednodušeno - bez velocity levels)."""
+
+    def __init__(self):
+        self.global_min: float = 0.0
+        self.global_max: float = 1.0
+        self.filter_min: float = 0.0
+        self.filter_max: float = 1.0
+        self.total_samples: int = 0
+        self.valid_samples: int = 0
+
+        # Statistiky
+        self.mean_amplitude: float = 0.0
+        self.std_amplitude: float = 0.0
+        self.percentile_5: float = 0.0
+        self.percentile_95: float = 1.0
+
+    def update_from_range_info(self, range_info: dict):
+        """Aktualizuje nastavení z AmplitudeRangeManager."""
+        self.global_min = range_info.get('min', 0.0)
+        self.global_max = range_info.get('max', 1.0)
+        self.total_samples = range_info.get('count', 0)
+        self.mean_amplitude = range_info.get('mean', 0.0)
+        self.std_amplitude = range_info.get('std', 0.0)
+        self.percentile_5 = range_info.get('percentile_5', 0.0)
+        self.percentile_95 = range_info.get('percentile_95', 1.0)
+
+        # Výchozí filtr na celý rozsah
+        if self.filter_min == 0.0 and self.filter_max == 1.0:
+            self.filter_min = self.global_min
+            self.filter_max = self.global_max
+
+    def is_in_range(self, amplitude: float) -> bool:
+        """Kontroluje, zda je amplitude v povoleném rozsahu."""
+        return self.filter_min <= amplitude <= self.filter_max
 
 
 class AmplitudeFilterWidget(QGroupBox):
-    """Widget pro nastavení amplitude filtru a velocity mappingu - používá velocity_amplitude (RMS 500ms)"""
+    """Widget pro nastavení amplitude filtru - používá velocity_amplitude (RMS 500ms)."""
 
-    filter_applied = Signal(object)  # AmplitudeFilterSettings
-    velocity_assigned = Signal(object)  # AmplitudeFilterSettings
+    filter_applied = Signal(object)  # AmplitudeFilterSettings (jen pro filtraci)
 
     def __init__(self):
-        super().__init__("Velocity Amplitude Filter & Assignment (RMS 500ms)")
+        super().__init__("Velocity Amplitude Filter (RMS 500ms)")
         self.filter_settings = AmplitudeFilterSettings()
         self.samples = []
         self.init_ui()
         self.update_display()
 
     def init_ui(self):
-        """Inicializuje UI komponenty"""
+        """Inicializuje UI komponenty."""
         layout = QVBoxLayout()
 
         # Hlavní horizontální rozdělení
@@ -39,21 +75,21 @@ class AmplitudeFilterWidget(QGroupBox):
 
         layout.addLayout(main_horizontal_layout)
 
-        # Akční tlačítka zůstávají dole
+        # Akční tlačítka dole
         self._create_action_buttons(layout)
 
         self.setLayout(layout)
         self.setMaximumHeight(200)
 
     def _create_slider_section(self, main_layout):
-        """Vytvoří levou sekci s posuvníky"""
+        """Vytvoří levou sekci s posuvníky."""
         slider_frame = QFrame()
         slider_frame.setStyleSheet(
             "QFrame { background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 3px; }")
         slider_layout = QVBoxLayout()
 
         # Nadpis pro slider sekci
-        slider_title = QLabel("Velocity Amplitude Range (RMS 500ms)")
+        slider_title = QLabel("Amplitude Range (RMS 500ms)")
         slider_title.setStyleSheet("font-weight: bold; color: #333; font-size: 12px; text-align: center;")
         slider_title.setAlignment(Qt.AlignCenter)
         slider_layout.addWidget(slider_title)
@@ -66,7 +102,7 @@ class AmplitudeFilterWidget(QGroupBox):
 
         self.min_slider = QSlider(Qt.Horizontal)
         self.min_slider.setMinimum(0)
-        self.min_slider.setMaximum(10000)  # Budeme škálovat
+        self.min_slider.setMaximum(10000)  # Škálování
         self.min_slider.valueChanged.connect(self._on_min_slider_changed)
         min_layout.addWidget(self.min_slider)
 
@@ -108,13 +144,13 @@ class AmplitudeFilterWidget(QGroupBox):
         main_layout.addWidget(slider_frame)
 
     def _create_info_section(self, main_layout):
-        """Vytvoří pravou sekci s textovými informacemi"""
+        """Vytvoří pravou sekci s textovými informacemi."""
         info_frame = QFrame()
         info_frame.setStyleSheet("QFrame { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 3px; }")
         info_layout = QVBoxLayout()
 
         # Nadpis pro info sekci
-        info_title = QLabel("Velocity Detection Info")
+        info_title = QLabel("Amplitude Detection Info")
         info_title.setStyleSheet("font-weight: bold; color: #333; font-size: 12px; text-align: center;")
         info_title.setAlignment(Qt.AlignCenter)
         info_layout.addWidget(info_title)
@@ -138,113 +174,43 @@ class AmplitudeFilterWidget(QGroupBox):
         main_layout.addWidget(info_frame)
 
     def _create_action_buttons(self, layout):
-        """Vytvoří akční tlačítka"""
+        """Vytvoří akční tlačítka (jen Reset a Apply Filter)."""
         button_layout = QHBoxLayout()
 
         # Reset tlačítko
-        self.reset_button = QPushButton("Reset to Full Range")
+        self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self._reset_to_full_range)
-        self.reset_button.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d; 
-                color: white; 
-                font-weight: bold; 
-                padding: 6px 12px;
-                border-radius: 4px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-        """)
+        self.reset_button.setEnabled(False)
         button_layout.addWidget(self.reset_button)
-
-        button_layout.addStretch()
 
         # Apply Filter tlačítko
         self.apply_button = QPushButton("Apply Filter")
         self.apply_button.clicked.connect(self._apply_filter)
-        self.apply_button.setStyleSheet("""
-            QPushButton {
-                background-color: #fd7e14; 
-                color: white; 
-                font-weight: bold; 
-                padding: 6px 12px;
-                border-radius: 4px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #e76500;
-            }
-        """)
+        self.apply_button.setEnabled(False)
+        self.apply_button.setStyleSheet("background-color: #007bff; color: white;")
         button_layout.addWidget(self.apply_button)
-
-        # Assign tlačítko
-        self.assign_button = QPushButton("Assign")
-        self.assign_button.clicked.connect(self._assign_velocity)
-        self.assign_button.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745; 
-                color: white; 
-                font-weight: bold; 
-                padding: 6px 12px;
-                border-radius: 4px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-        """)
-        button_layout.addWidget(self.assign_button)
 
         layout.addLayout(button_layout)
 
-    def set_amplitude_data(self, samples: List[SampleMetadata], range_info: dict):
-        """Nastaví amplitude data a rozsah - ZMĚNA: používá velocity_amplitude"""
-        self.samples = samples
-        self.filter_settings.update_from_range_info(range_info)
-        self.update_display()
-        self._update_sliders()
-
-    def _update_sliders(self):
-        """Aktualizuje rozsah a hodnoty posuvníků"""
-        if self.filter_settings.global_max <= self.filter_settings.global_min:
-            return
-
-        # Nastavení rozsahu spinboxů
-        self.min_spinbox.setMinimum(self.filter_settings.global_min)
-        self.min_spinbox.setMaximum(self.filter_settings.global_max)
-        self.max_spinbox.setMinimum(self.filter_settings.global_min)
-        self.max_spinbox.setMaximum(self.filter_settings.global_max)
-
-        # Nastavení hodnot
-        self.min_spinbox.setValue(self.filter_settings.filter_min)
-        self.max_spinbox.setValue(self.filter_settings.filter_max)
-
-        # Aktualizace sliderů
-        self._update_slider_from_spinbox()
-
     def _update_slider_from_spinbox(self):
-        """Aktualizuje slidery podle spinboxů"""
+        """Aktualizuje slidery podle spinboxů."""
         if self.filter_settings.global_max <= self.filter_settings.global_min:
             return
 
         range_size = self.filter_settings.global_max - self.filter_settings.global_min
 
-        # Min slider
         min_ratio = (self.filter_settings.filter_min - self.filter_settings.global_min) / range_size
         self.min_slider.blockSignals(True)
         self.min_slider.setValue(int(min_ratio * 10000))
         self.min_slider.blockSignals(False)
 
-        # Max slider
         max_ratio = (self.filter_settings.filter_max - self.filter_settings.global_min) / range_size
         self.max_slider.blockSignals(True)
         self.max_slider.setValue(int(max_ratio * 10000))
         self.max_slider.blockSignals(False)
 
     def _on_min_slider_changed(self, value):
-        """Handler pro změnu min slideru"""
+        """Handler pro změnu min slideru."""
         if self.filter_settings.global_max <= self.filter_settings.global_min:
             return
 
@@ -267,7 +233,7 @@ class AmplitudeFilterWidget(QGroupBox):
         self._update_valid_samples_count()
 
     def _on_max_slider_changed(self, value):
-        """Handler pro změnu max slideru"""
+        """Handler pro změnu max slideru."""
         if self.filter_settings.global_max <= self.filter_settings.global_min:
             return
 
@@ -290,7 +256,7 @@ class AmplitudeFilterWidget(QGroupBox):
         self._update_valid_samples_count()
 
     def _on_min_spinbox_changed(self, value):
-        """Handler pro změnu min spinboxu"""
+        """Handler pro změnu min spinboxu."""
         self.filter_settings.filter_min = value
 
         # Zajisti že min <= max
@@ -302,7 +268,7 @@ class AmplitudeFilterWidget(QGroupBox):
         self._update_valid_samples_count()
 
     def _on_max_spinbox_changed(self, value):
-        """Handler pro změnu max spinboxu"""
+        """Handler pro změnu max spinboxu."""
         self.filter_settings.filter_max = value
 
         # Zajisti že min <= max
@@ -314,13 +280,12 @@ class AmplitudeFilterWidget(QGroupBox):
         self._update_valid_samples_count()
 
     def _update_valid_samples_count(self):
-        """Aktualizuje počet validních samples - ZMĚNA: používá velocity_amplitude"""
+        """Aktualizuje počet validních samples - používá velocity_amplitude."""
         if not self.samples:
             self.filter_settings.valid_samples = 0
         else:
             valid_count = 0
             for sample in self.samples:
-                # ZMĚNA: kontrola velocity_amplitude místo peak_amplitude
                 if (sample.velocity_amplitude is not None and
                         self.filter_settings.is_in_range(sample.velocity_amplitude)):
                     valid_count += 1
@@ -329,7 +294,7 @@ class AmplitudeFilterWidget(QGroupBox):
         self._update_samples_label()
 
     def _update_samples_label(self):
-        """Aktualizuje label s počtem samples"""
+        """Aktualizuje label s počtem samples."""
         valid = self.filter_settings.valid_samples
         total = self.filter_settings.total_samples
         percentage = (valid / total * 100) if total > 0 else 0
@@ -340,24 +305,28 @@ class AmplitudeFilterWidget(QGroupBox):
         self.samples_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
 
     def _reset_to_full_range(self):
-        """Reset na plný rozsah"""
+        """Reset na plný rozsah."""
         self.filter_settings.filter_min = self.filter_settings.global_min
         self.filter_settings.filter_max = self.filter_settings.global_max
         self._update_sliders()
         self._update_valid_samples_count()
 
     def _apply_filter(self):
-        """Aplikuje filtr - označí samples šedou barvou"""
-        # Emit signál s aktuálním nastavením
+        """Aplikuje filtr - označí samples šedou barvou."""
         self.filter_applied.emit(self.filter_settings)
 
-    def _assign_velocity(self):
-        """Přiřadí velocity levels"""
-        # Emit signál pro přiřazení velocity
-        self.velocity_assigned.emit(self.filter_settings)
+    def update_range_info(self, range_info: dict):
+        """
+        Aktualizuje rozsah amplitud z analýzy.
+
+        Args:
+            range_info: Dictionary s informacemi o rozsahu amplitud.
+        """
+        self.filter_settings.update_from_range_info(range_info)
+        self.update_display()
 
     def update_display(self):
-        """Aktualizuje všechny display elementy"""
+        """Aktualizuje všechny display elementy."""
         # Range label
         if self.filter_settings.total_samples == 0:
             self.range_label.setText("Detected range: No data")
@@ -384,8 +353,13 @@ class AmplitudeFilterWidget(QGroupBox):
         self.max_spinbox.setEnabled(has_data)
         self.reset_button.setEnabled(has_data)
         self.apply_button.setEnabled(has_data)
-        self.assign_button.setEnabled(has_data)
+
+    def _update_sliders(self):
+        """Aktualizuje slidery."""
+        self.min_spinbox.setValue(self.filter_settings.filter_min)
+        self.max_spinbox.setValue(self.filter_settings.filter_max)
+        self._update_slider_from_spinbox()
 
     def get_filter_settings(self) -> AmplitudeFilterSettings:
-        """Vrátí aktuální nastavení filtru"""
+        """Vrátí aktuální nastavení filtru."""
         return self.filter_settings

@@ -4,16 +4,16 @@ sample_editor_widget.py - MIDI editor s automatickým přehráváním transponov
 
 from typing import Optional
 from PySide6.QtWidgets import (QGroupBox, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QSpinBox, QFrame)
+                               QPushButton, QFrame, QSpinBox)  # Přidán QSpinBox
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
 from models import SampleMetadata
-from midi_utils import MidiUtils, VelocityUtils
+from midi_utils import MidiUtils
 
 
 class SampleMidiEditor(QGroupBox):
-    """MIDI editor pro úpravu parametrů sample s automatickým přehráváním tónů"""
+    """MIDI editor pro úpravu parametrů sample s automatickým přehráváním tónů."""
 
     midi_note_changed = Signal(object, int, int)  # sample, old_midi, new_midi
     play_transposed_tone = Signal(int)  # midi_note - nový signál pro přehrání transponovaného tónu
@@ -25,7 +25,7 @@ class SampleMidiEditor(QGroupBox):
         self.init_ui()
 
     def init_ui(self):
-        """Inicializace MIDI editoru"""
+        """Inicializace MIDI editoru."""
         layout = QVBoxLayout()
 
         # Info o aktuálním sample
@@ -34,18 +34,18 @@ class SampleMidiEditor(QGroupBox):
         # MIDI nota editor
         self._create_midi_editor_section(layout)
 
-        # Velocity editor (jen pro zobrazení)
-        self._create_velocity_section(layout)
+        # Amplitude info (nahradí velocity, protože velocity_level odebráno)
+        self._create_amplitude_section(layout)
 
         # Auto-play kontrola
         self._create_autoplay_section(layout)
 
         self.setLayout(layout)
-        self.setMaximumHeight(350)  # Zvětšeno z 320 na 350 pro větší prvky
+        self.setMaximumHeight(350)  # Zvětšeno pro větší prvky
         self._update_display()
 
     def _create_sample_info_section(self, layout):
-        """Vytvoří sekci s informacemi o sample"""
+        """Vytvoří sekci s informacemi o sample."""
         info_frame = QFrame()
         info_frame.setStyleSheet("QFrame { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; }")
         info_layout = QVBoxLayout()
@@ -62,7 +62,7 @@ class SampleMidiEditor(QGroupBox):
         layout.addWidget(info_frame)
 
     def _create_midi_editor_section(self, layout):
-        """Vytvoří sekci pro úpravu MIDI noty"""
+        """Vytvoří sekci pro úpravu MIDI noty."""
         midi_frame = QFrame()
         midi_frame.setStyleSheet("QFrame { background-color: #fff; border: 1px solid #dee2e6; border-radius: 5px; }")
         midi_layout = QVBoxLayout()
@@ -101,8 +101,8 @@ class SampleMidiEditor(QGroupBox):
         layout.addWidget(midi_frame)
 
     def _create_transpose_buttons(self, layout):
-        """Vytvoří tlačítka pro transpozici"""
-        # Řádek 1: Půltóny - původní velikost
+        """Vytvoří tlačítka pro transpozici."""
+        # Řádek 1: Půltóny
         semitone_layout = QHBoxLayout()
 
         btn_minus_1 = QPushButton("-1")
@@ -121,7 +121,7 @@ class SampleMidiEditor(QGroupBox):
 
         layout.addLayout(semitone_layout)
 
-        # Řádek 2: Oktávy - původní velikost
+        # Řádek 2: Oktávy
         octave_layout = QHBoxLayout()
 
         btn_minus_12 = QPushButton("-12")
@@ -135,40 +135,61 @@ class SampleMidiEditor(QGroupBox):
         btn_plus_12 = QPushButton("+12")
         btn_plus_12.clicked.connect(lambda: self._transpose(12))
         btn_plus_12.setToolTip("Zvýšit o oktávu")
-        btn_plus_12.setStyleSheet("QPushButton { background-color: #229954; color: white; font-weight: bold; }")
+        btn_plus_12.setStyleSheet("QPushButton { background-color: #2ecc71; color: white; font-weight: bold; }")
         octave_layout.addWidget(btn_plus_12)
 
         layout.addLayout(octave_layout)
 
-    def _create_velocity_section(self, layout):
-        """Vytvoří sekci pro zobrazení velocity (jen read-only)"""
-        velocity_frame = QFrame()
-        velocity_frame.setStyleSheet("QFrame { background-color: #fff; border: 1px solid #dee2e6; border-radius: 5px; }")
-        velocity_layout = QHBoxLayout()
+        # Řádek 3: Ruční MIDI input
+        manual_layout = QHBoxLayout()
 
-        velocity_title = QLabel("Velocity:")
-        velocity_title.setStyleSheet("font-weight: bold; color: #333;")
-        velocity_layout.addWidget(velocity_title)
+        manual_label = QLabel("Ruční MIDI:")
+        manual_label.setStyleSheet("font-weight: bold; color: #333;")
+        manual_layout.addWidget(manual_label)
 
-        self.velocity_display_label = QLabel("Medium (4)")
-        self.velocity_display_label.setStyleSheet("""
+        self.midi_spinbox = QSpinBox()
+        self.midi_spinbox.setMinimum(MidiUtils.PIANO_MIN_MIDI)
+        self.midi_spinbox.setMaximum(MidiUtils.PIANO_MAX_MIDI)
+        self.midi_spinbox.setValue(60)  # Default C4
+        manual_layout.addWidget(self.midi_spinbox)
+
+        btn_set_midi = QPushButton("Nastavit")
+        btn_set_midi.clicked.connect(self._set_manual_midi)
+        btn_set_midi.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; }")
+        manual_layout.addWidget(btn_set_midi)
+
+        layout.addLayout(manual_layout)
+
+    def _create_amplitude_section(self, layout):
+        """Vytvoří sekci pro zobrazení amplitude info (nahradí velocity)."""
+        amplitude_frame = QFrame()
+        amplitude_frame.setStyleSheet("QFrame { background-color: #fff; border: 1px solid #dee2e6; border-radius: 5px; }")
+        amplitude_layout = QVBoxLayout()
+
+        amplitude_title = QLabel("Amplitude RMS (500ms):")
+        amplitude_title.setStyleSheet("font-weight: bold; color: #333; font-size: 18px;")
+        amplitude_layout.addWidget(amplitude_title)
+
+        self.amplitude_display_label = QLabel("--")
+        self.amplitude_display_label.setStyleSheet("""
             QLabel {
-                font-size: 14px; 
+                font-size: 18px; 
+                font-weight: bold; 
                 color: #2c3e50; 
                 background-color: #ecf0f1; 
-                padding: 5px; 
+                padding: 8px 12px; 
                 border-radius: 4px;
+                border: 1px solid #bdc3c7;
+                margin-left: 10px;
             }
         """)
-        velocity_layout.addWidget(self.velocity_display_label)
+        amplitude_layout.addWidget(self.amplitude_display_label)
 
-        velocity_layout.addStretch()
-
-        velocity_frame.setLayout(velocity_layout)
-        layout.addWidget(velocity_frame)
+        amplitude_frame.setLayout(amplitude_layout)
+        layout.addWidget(amplitude_frame)
 
     def _create_autoplay_section(self, layout):
-        """Vytvoří sekci pro kontrolu automatického přehrávání"""
+        """Vytvoří sekci pro auto-play."""
         autoplay_layout = QHBoxLayout()
 
         self.autoplay_button = QPushButton("Auto-přehrávání: ZAP")
@@ -210,33 +231,33 @@ class SampleMidiEditor(QGroupBox):
         layout.addLayout(autoplay_layout)
 
     def set_current_sample(self, sample: SampleMetadata):
-        """Nastaví aktuální sample pro editaci"""
+        """Nastaví aktuální sample pro editaci."""
         self.current_sample = sample
         self._update_display()
 
     def _transpose(self, semitones: int):
-        """Transponuje MIDI notu o zadaný počet půltónů"""
+        """Transponuje MIDI notu o zadaný počet půltónů."""
         if not self.current_sample:
             return
 
         old_midi = self.current_sample.detected_midi
         new_midi = old_midi + semitones
 
-        # Omeď na piano rozsah
+        # Omezit na piano rozsah
         new_midi = max(MidiUtils.PIANO_MIN_MIDI, min(MidiUtils.PIANO_MAX_MIDI, new_midi))
 
         if new_midi != old_midi:
             self._change_midi_note(old_midi, new_midi)
 
     def _change_midi_note(self, old_midi: int, new_midi: int):
-        """Provede změnu MIDI noty a přehraje nový tón"""
+        """Provede změnu MIDI noty a přehraje nový tón."""
         if not self.current_sample:
             return
 
         # Aktualizuj sample
         self.current_sample.detected_midi = new_midi
 
-        # Aktualizuj UI - explicitní aktualizace
+        # Aktualizuj UI
         self._update_display()
 
         # Přehraj nový tón pokud je auto-play zapnutý
@@ -247,17 +268,17 @@ class SampleMidiEditor(QGroupBox):
         self.midi_note_changed.emit(self.current_sample, old_midi, new_midi)
 
     def _manual_play_tone(self):
-        """Ručně přehraje aktuální MIDI tón"""
+        """Ručně přehraje aktuální MIDI tón."""
         if self.current_sample:
             self.play_transposed_tone.emit(self.current_sample.detected_midi)
 
     def _toggle_autoplay(self):
-        """Přepne automatické přehrávání"""
+        """Přepne automatické přehrávání."""
         self.auto_play_enabled = not self.auto_play_enabled
         self._update_autoplay_button()
 
     def _update_autoplay_button(self):
-        """Aktualizuje vzhled auto-play tlačítka"""
+        """Aktualizuje vzhled auto-play tlačítka."""
         if self.auto_play_enabled:
             self.autoplay_button.setText("Auto-přehrávání: ZAP")
             self.autoplay_button.setStyleSheet("""
@@ -288,20 +309,19 @@ class SampleMidiEditor(QGroupBox):
             """)
 
     def _update_display(self):
-        """Aktualizuje zobrazení editoru"""
+        """Aktualizuje zobrazení editoru."""
         if self.current_sample:
-            # Explicitní aktualizace MIDI noty
+            # Aktualizace MIDI noty
             note_name = MidiUtils.midi_to_note_name(self.current_sample.detected_midi)
             midi_text = f"{note_name} ({self.current_sample.detected_midi})"
 
-            # Debug výpis
             print(f"Nastavuji MIDI text: '{midi_text}'")
 
-            # Nastav text
             self.midi_display_label.setText(midi_text)
 
-            velocity_desc = VelocityUtils.velocity_to_description(self.current_sample.velocity_level)
-            self.velocity_display_label.setText(f"{velocity_desc} ({self.current_sample.velocity_level})")
+            # Nahrazení velocity RMS hodnotou (odebráno velocity_level)
+            amplitude_text = f"{self.current_sample.velocity_amplitude:.6f}" if self.current_sample.velocity_amplitude is not None else "--"
+            self.amplitude_display_label.setText(amplitude_text)
 
             self.sample_filename_label.setText(f"Sample: {self.current_sample.filename}")
             self.sample_confidence_label.setText(f"Pitch confidence: {self.current_sample.pitch_confidence:.2f}")
@@ -310,9 +330,20 @@ class SampleMidiEditor(QGroupBox):
         else:
             print("Žádný sample není vybrán")
             self.midi_display_label.setText("--")
-            self.velocity_display_label.setText("--")
+            self.amplitude_display_label.setText("--")
             self.sample_filename_label.setText("Žádný sample vybrán")
             self.sample_confidence_label.setText("")
             self.setEnabled(False)
 
         self._update_autoplay_button()
+
+    def _set_manual_midi(self):
+        """Nastaví ručně zadanou MIDI notu."""
+        if not self.current_sample:
+            return
+
+        old_midi = self.current_sample.detected_midi
+        new_midi = self.midi_spinbox.value()
+
+        if new_midi != old_midi:
+            self._change_midi_note(old_midi, new_midi)
