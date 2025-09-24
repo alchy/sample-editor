@@ -1,12 +1,12 @@
 """
-inline_midi_editor.py - Kompaktní MIDI editor s dedikovaným drag tlačítkem
+inline_midi_editor.py - Kompaktní MIDI editor s dedikovaným drag tlačítkem - OPRAVENÝ SELECTION
 """
 
 from typing import Optional
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QPushButton, QFrame,
                                QCheckBox, QDialog, QVBoxLayout, QDialogButtonBox, QTextEdit, QApplication)
 from PySide6.QtCore import Qt, Signal, QMimeData
-from PySide6.QtGui import QFont, QDrag, QPixmap, QPainter, QColor
+from PySide6.QtGui import QFont, QDrag, QPixmap, QPainter, QColor, QMouseEvent
 
 from models import SampleMetadata
 from midi_utils import MidiUtils
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class SampleListItem(QWidget):
     """
     Rozšířený item pro sample list s dedikovaným drag tlačítkem.
-    Separuje drag operace od selection a editace.
+    OPRAVENÝ selection handling a širší tlačítka.
     """
 
     sample_selected = Signal(object)  # sample
@@ -39,80 +39,83 @@ class SampleListItem(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        """Inicializuje kompaktní UI s dedikovaným drag tlačítkem."""
+        """Inicializuje kompaktní UI s dedikovaným drag tlačítkem - ŠIRŠÍ TLAČÍTKA."""
         layout = QHBoxLayout()
         layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(3)
+        layout.setSpacing(4)  # Zvětšený spacing
 
-        # DRAG TLAČÍTKO - první pozice pro snadné uchopení
+        # DRAG TLAČÍTKO - ŠIRŠÍ pro lepší použitelnost
         self.drag_button = self._create_drag_button()
         layout.addWidget(self.drag_button)
 
-        # Disable checkbox
+        # Disable checkbox - trochu větší
         self.disable_checkbox = QCheckBox()
         self.disable_checkbox.setChecked(self.sample.disabled)
         self.disable_checkbox.setToolTip("Zakázat použití tohoto sample")
         self.disable_checkbox.stateChanged.connect(self._on_disable_changed)
-        self.disable_checkbox.setMaximumWidth(20)
+        self.disable_checkbox.setMaximumWidth(25)  # Zvětšeno z 20
         layout.addWidget(self.disable_checkbox)
 
         # MIDI info - prioritní informace
         midi_info_layout = QHBoxLayout()
-        midi_info_layout.setSpacing(3)
+        midi_info_layout.setSpacing(4)  # Zvětšený spacing
 
-        # MIDI číslo
+        # MIDI číslo - širší
         self.midi_number_label = QLabel()
-        self.midi_number_label.setMinimumWidth(35)
+        self.midi_number_label.setMinimumWidth(40)  # Zvětšeno z 35
         self.midi_number_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
                 background-color: #e3f2fd;
-                padding: 2px 4px;
-                border-radius: 3px;
+                padding: 3px 5px;
+                border-radius: 4px;
                 border: 1px solid #1976d2;
                 color: #1976d2;
+                font-size: 11px;
             }
         """)
         midi_info_layout.addWidget(self.midi_number_label)
 
-        # Nota název
+        # Nota název - širší
         self.note_name_label = QLabel()
-        self.note_name_label.setMinimumWidth(30)
+        self.note_name_label.setMinimumWidth(35)  # Zvětšeno z 30
         self.note_name_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
                 background-color: #f3e5f5;
-                padding: 2px 4px;
-                border-radius: 3px;
+                padding: 3px 5px;
+                border-radius: 4px;
                 border: 1px solid #7b1fa2;
                 color: #7b1fa2;
+                font-size: 11px;
             }
         """)
         midi_info_layout.addWidget(self.note_name_label)
 
-        # RMS info
+        # RMS info - širší
         self.rms_label = QLabel()
-        self.rms_label.setMinimumWidth(80)
+        self.rms_label.setMinimumWidth(90)  # Zvětšeno z 80
         self.rms_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
                 background-color: #e8f5e9;
-                padding: 2px 4px;
-                border-radius: 3px;
+                padding: 3px 5px;
+                border-radius: 4px;
                 border: 1px solid #388e3c;
                 color: #388e3c;
+                font-size: 10px;
             }
         """)
         midi_info_layout.addWidget(self.rms_label)
 
         layout.addLayout(midi_info_layout)
 
-        # Transpozice tlačítka (kompaktní)
+        # Transpozice tlačítka (širší)
         self._create_compact_transpose_buttons(layout)
 
-        # Play button
+        # Play button - širší
         play_btn = QPushButton("♪")
-        play_btn.setMaximumWidth(20)
+        play_btn.setMaximumWidth(25)  # Zvětšeno z 20
         play_btn.setToolTip("Přehrát sample")
         play_btn.clicked.connect(self._play_sample)
         play_btn.setStyleSheet("""
@@ -120,8 +123,9 @@ class SampleListItem(QWidget):
                 background-color: #4CAF50;
                 color: white;
                 font-weight: bold;
-                border-radius: 3px;
+                border-radius: 4px;
                 border: none;
+                font-size: 12px;
             }
             QPushButton:hover {
                 background-color: #45a049;
@@ -132,30 +136,56 @@ class SampleListItem(QWidget):
         layout.addStretch()
 
         self.setLayout(layout)
-        self.setMaximumHeight(28)
+        self.setMaximumHeight(32)  # Zvětšeno z 28 pro širší tlačítka
         self._update_display()
 
-        # Selection handling - pouze pro klik na hlavní oblast
-        self.mousePressEvent = self._on_mouse_press
+        # OPRAVENÝ selection handling - pouze mouse release event
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_file_info)
 
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        """OPRAVENÝ selection handling - pouze na mouse release."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Kontrola, zda klik nebyl na drag tlačítko nebo jiné interaktivní prvky
+            drag_button_rect = self.drag_button.geometry()
+            checkbox_rect = self.disable_checkbox.geometry()
+
+            click_pos = event.pos()
+
+            # Ignoruj kliky na interaktivní prvky
+            if (drag_button_rect.contains(click_pos) or
+                checkbox_rect.contains(click_pos)):
+                super().mouseReleaseEvent(event)
+                return
+
+            # Zkontroluj transpozice tlačítka
+            for child in self.findChildren(QPushButton):
+                if child != self.drag_button and child.geometry().contains(click_pos):
+                    super().mouseReleaseEvent(event)
+                    return
+
+            # Jinak proveď selection
+            self.sample_selected.emit(self.sample)
+            logger.debug(f"Selected sample: {self.sample.filename}")
+
+        super().mouseReleaseEvent(event)
+
     def _create_drag_button(self) -> QPushButton:
-        """Vytvoří dedikované drag tlačítko."""
+        """Vytvoří dedikované drag tlačítko - ŠIRŠÍ."""
         drag_btn = QPushButton("⋮⋮")  # Vertical dots jako drag handle
-        drag_btn.setMaximumWidth(25)
-        drag_btn.setMaximumHeight(26)
+        drag_btn.setMaximumWidth(30)  # Zvětšeno z 25
+        drag_btn.setMaximumHeight(30)  # Zvětšeno z 26
         drag_btn.setToolTip("Přetáhnout do matice (Drag & Drop)")
 
-        # Styling pro drag handle
+        # Styling pro drag handle - vylepšený
         drag_btn.setStyleSheet("""
             QPushButton {
                 background-color: #2196F3;
                 color: white;
                 font-weight: bold;
-                border-radius: 3px;
+                border-radius: 4px;
                 border: none;
-                font-size: 12px;
+                font-size: 14px;
                 letter-spacing: -1px;
             }
             QPushButton:hover {
@@ -253,7 +283,7 @@ class SampleListItem(QWidget):
     def _create_drag_pixmap(self) -> QPixmap:
         """Vytvoří pixmap pro drag operaci."""
         try:
-            width, height = 250, 80
+            width, height = 280, 90  # Zvětšeno
             pixmap = QPixmap(width, height)
             pixmap.fill(QColor(33, 150, 243, 200))  # Material Blue s průhledností
 
@@ -261,22 +291,22 @@ class SampleListItem(QWidget):
             painter.setPen(QColor(255, 255, 255))
 
             # Header
-            painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            painter.drawText(5, 15, "DRAG & DROP")
+            painter.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+            painter.drawText(8, 18, "DRAG & DROP")
 
             # Filename
-            painter.setFont(QFont("Arial", 9))
-            filename_text = self.sample.filename[:30] + "..." if len(self.sample.filename) > 30 else self.sample.filename
-            painter.drawText(5, 35, filename_text)
+            painter.setFont(QFont("Arial", 10))
+            filename_text = self.sample.filename[:35] + "..." if len(self.sample.filename) > 35 else self.sample.filename
+            painter.drawText(8, 38, filename_text)
 
             # MIDI info
             if self.sample.detected_midi:
                 note_name = MidiUtils.midi_to_note_name(self.sample.detected_midi)
-                painter.drawText(5, 50, f"♪ {note_name} (MIDI {self.sample.detected_midi})")
+                painter.drawText(8, 55, f"♪ {note_name} (MIDI {self.sample.detected_midi})")
 
             # RMS info
             if self.sample.velocity_amplitude:
-                painter.drawText(5, 65, f"RMS: {self.sample.velocity_amplitude:.6f}")
+                painter.drawText(8, 72, f"RMS: {self.sample.velocity_amplitude:.6f}")
 
             painter.end()
             return pixmap
@@ -286,9 +316,9 @@ class SampleListItem(QWidget):
             return QPixmap()
 
     def _create_compact_transpose_buttons(self, layout):
-        """Vytvoří kompaktní transpozice tlačítka."""
+        """Vytvoří kompaktní transpozice tlačítka - ŠIRŠÍ."""
         transpose_layout = QHBoxLayout()
-        transpose_layout.setSpacing(1)
+        transpose_layout.setSpacing(2)  # Zvětšený spacing
 
         # -12, -1, +1, +12
         buttons_config = [
@@ -300,8 +330,8 @@ class SampleListItem(QWidget):
 
         for text, semitones, color, tooltip in buttons_config:
             btn = QPushButton(text)
-            btn.setMaximumWidth(20)
-            btn.setMaximumHeight(20)
+            btn.setMaximumWidth(25)  # Zvětšeno z 20
+            btn.setMaximumHeight(25)  # Zvětšeno z 20
             btn.clicked.connect(lambda checked, s=semitones: self._transpose(s))
             btn.setToolTip(tooltip)
             btn.setStyleSheet(f"""
@@ -309,9 +339,9 @@ class SampleListItem(QWidget):
                     background-color: {color};
                     color: white;
                     font-weight: bold;
-                    border-radius: 2px;
+                    border-radius: 3px;
                     border: none;
-                    font-size: 9px;
+                    font-size: 10px;
                 }}
                 QPushButton:hover {{
                     opacity: 0.8;
@@ -389,7 +419,7 @@ class SampleListItem(QWidget):
             SampleListItem {{
                 background-color: {bg_color};
                 border: 1px solid #ddd;
-                border-radius: 3px;
+                border-radius: 4px;
                 {opacity}
             }}
         """)
@@ -422,14 +452,6 @@ class SampleListItem(QWidget):
         """Přehraje sample."""
         if self.sample and not self.sample.disabled:
             self.sample_play_requested.emit(self.sample)
-
-    def _on_mouse_press(self, event):
-        """Obsluha kliknutí na item - pouze selection."""
-        if event.button() == Qt.MouseButton.LeftButton:
-            # Kontrola, zda klik nebyl na drag tlačítko
-            drag_button_rect = self.drag_button.geometry()
-            if not drag_button_rect.contains(event.pos()):
-                self.sample_selected.emit(self.sample)
 
     def _show_file_info(self, position):
         """Zobrazí dialog s informacemi o souboru při pravém kliknutí."""
