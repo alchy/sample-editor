@@ -1,5 +1,5 @@
 """
-export_utils.py - Utility funkce pro export samples - OPRAVENÁ VERZE
+export_utils.py - Utility funkce pro export samples se skutečnou sample rate konverzí
 """
 
 import shutil
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class ExportManager:
-    """Správce exportu namapovaných samples - OPRAVENÁ VERZE."""
+    """Správce exportu namapovaných samples se sample rate konverzí."""
 
     def __init__(self, output_folder: Path):
         self.output_folder = Path(output_folder)
@@ -25,7 +25,7 @@ class ExportManager:
 
     def export_mapped_samples(self, mapping: Dict[Tuple[int, int], SampleMetadata]) -> Dict[str, Union[int, List[str], List[Tuple[str, str]]]]:
         """
-        Exportuje všechny namapované samples.
+        Exportuje všechny namapované samples se skutečnou sample rate konverzí.
 
         Args:
             mapping: Dictionary (midi_note, velocity) -> SampleMetadata
@@ -33,15 +33,24 @@ class ExportManager:
         Returns:
             Dictionary s informacemi o exportu
         """
+
+        # Kontrola dostupnosti knihoven pro sample rate konverzi
+        try:
+            import soundfile as sf
+            import librosa
+        except ImportError as e:
+            raise ValueError(f"Chybí knihovny pro sample rate konverzi: {e}. "
+                           f"Nainstalujte: pip install soundfile librosa")
+
         if not mapping:
             raise ValueError("Žádné samples k exportu")
 
-        # OPRAVA: Validace před exportem
+        # Validace před exportem
         validation_errors = ExportValidator.validate_mapping(mapping)
         if validation_errors:
             raise ValueError(f"Validační chyby: {'; '.join(validation_errors[:3])}")
 
-        # Vytvoř výstupní složku pokud neexistuje
+        # Vytvořit výstupní složku pokud neexistuje
         try:
             self.output_folder.mkdir(parents=True, exist_ok=True)
         except Exception as e:
@@ -55,7 +64,7 @@ class ExportManager:
             'total_files': 0
         }
 
-        # OPRAVA: Bezpečná iterace přes mapping
+        # Exportuj každý sample
         for key, sample in list(mapping.items()):
             if not isinstance(key, tuple) or len(key) != 2:
                 logger.error(f"Neplatný klíč v mapping: {key}")
@@ -66,7 +75,7 @@ class ExportManager:
             midi_note, velocity = key
 
             try:
-                # OPRAVA: Dodatečná validace sample
+                # Dodatečná validace sample
                 if not self._validate_single_sample(sample, midi_note, velocity):
                     export_info['failed_files'].append((sample.filename, "Sample neprošel validací"))
                     export_info['failed_count'] += 1
@@ -115,7 +124,8 @@ class ExportManager:
 
     def _export_single_sample(self, sample: SampleMetadata, midi_note: int, velocity: int) -> List[Path]:
         """
-        Exportuje jeden sample do všech formátů.
+        Exportuje jeden sample do všech formátů se skutečnou sample rate konverzí.
+        Přepisuje existující soubory.
 
         Returns:
             Seznam cest k exportovaným souborům
@@ -127,33 +137,92 @@ class ExportManager:
                 output_filename = MidiUtils.generate_filename(midi_note, velocity, sample_rate)
                 output_path = self.output_folder / output_filename
 
-                # OPRAVA: Kontrola existence zdrojového souboru
+                # Kontrola existence zdrojového souboru
                 if not sample.filepath.exists():
                     raise FileNotFoundError(f"Zdrojový soubor neexistuje: {sample.filepath}")
 
-                # OPRAVA: Bezpečné kopírování s error handlingem
+                # Pokud cílový soubor existuje, bude přepsán (podle zadání)
+                if output_path.exists():
+                    logger.debug(f"Přepisuji existující soubor: {output_filename}")
+
+                # NAČTI ORIGINÁLNÍ AUDIO
                 try:
-                    # Pro prototyp - jen kopírování
-                    # V budoucnu zde bude sample rate konverze a případná pitch korekce
-                    shutil.copy2(sample.filepath, output_path)
+                    import soundfile as sf
+                    import librosa
+                    import numpy as np
 
-                    # OPRAVA: Verifikace úspěšného kopírování
-                    if not output_path.exists():
-                        raise RuntimeError(f"Kopírování selhalo - výstupní soubor neexistuje")
+                    audio_data, original_sr = sf.read(str(sample.filepath))
+                    logger.debug(f"Načten {sample.filename}: {original_sr}Hz -> {sample_rate}Hz")
 
-                    # OPRAVA: Kontrola velikosti souboru
-                    if output_path.stat().st_size == 0:
-                        raise RuntimeError(f"Výstupní soubor je prázdný")
+                except Exception as e:
+                    raise RuntimeError(f"Nelze načíst audio soubor {sample.filepath}: {e}")
 
-                    exported_files.append(output_path)
-                    logger.debug(f"Exportován: {output_filename}")
+                # SAMPLE RATE KONVERZE
+                if original_sr == sample_rate:
+                    # Stejný sample rate - pouze kopíruj
+                    try:
+                        shutil.copy2(sample.filepath, output_path)
+                        logger.debug(f"Zkopírován bez konverze: {output_filename}")
+                    except (OSError, IOError) as e:
+                        raise RuntimeError(f"Chyba při kopírování souboru: {e}")
+                else:
+                    # SKUTEČNÁ SAMPLE RATE KONVERZE
+                    try:
+                        if len(audio_data.shape) > 1:
+                            # Stereo/Multi-channel - resample každý kanál samostatně
+                            resampled_channels = []
+                            for channel in range(audio_data.shape[1]):
+                                resampled_channel = librosa.resample(
+                                    audio_data[:, channel],
+                                    orig_sr=original_sr,
+                                    target_sr=sample_rate,
+                                    res_type='kaiser_best'  # Vysoká kvalita resample
+                                )
+                                resampled_channels.append(resampled_channel)
 
-                except (OSError, IOError) as e:
-                    raise RuntimeError(f"Chyba při kopírování souboru: {e}")
+                            # Spojí kanály zpět
+                            resampled_audio = np.column_stack(resampled_channels)
+                        else:
+                            # Mono
+                            resampled_audio = librosa.resample(
+                                audio_data,
+                                orig_sr=original_sr,
+                                target_sr=sample_rate,
+                                res_type='kaiser_best'
+                            )
+
+                        # Ulož resamplovaný soubor
+                        sf.write(str(output_path), resampled_audio, sample_rate, subtype='PCM_16')
+
+                        logger.debug(f"Konvertován {original_sr}Hz -> {sample_rate}Hz: {output_filename}")
+
+                    except Exception as e:
+                        raise RuntimeError(f"Chyba při sample rate konverzi: {e}")
+
+                # VERIFIKACE ÚSPĚŠNÉHO EXPORTU
+                if not output_path.exists():
+                    raise RuntimeError(f"Export selhal - výstupní soubor neexistuje: {output_filename}")
+
+                # Kontrola velikosti souboru
+                if output_path.stat().st_size == 0:
+                    raise RuntimeError(f"Výstupní soubor je prázdný: {output_filename}")
+
+                # Volitelná verifikace sample rate (pokud soundfile dostupná)
+                try:
+                    _, verified_sr = sf.read(str(output_path), frames=1)
+                    if verified_sr != sample_rate:
+                        logger.warning(f"Sample rate verification failed: expected {sample_rate}, got {verified_sr}")
+                except:
+                    pass  # Verifikace je volitelná
+
+                logger.info(f"✓ Exportován: {sample.filename} -> {output_filename} "
+                           f"({original_sr}Hz -> {sample_rate}Hz)")
+
+                exported_files.append(output_path)
 
             except Exception as e:
-                logger.error(f"Chyba při exportu do {sr_suffix}: {e}")
-                # Continue with other formats even if one fails
+                logger.error(f"Export failed for {sr_suffix} ({sample_rate}Hz): {e}")
+                # Pokračuj s dalšími formáty i při selhání jednoho
                 continue
 
         if not exported_files:
@@ -186,7 +255,6 @@ class ExportManager:
         """
         preview = []
 
-        # OPRAVA: Bezpečná iterace přes mapping
         for key, sample in mapping.items():
             if not isinstance(key, tuple) or len(key) != 2:
                 continue
@@ -256,7 +324,7 @@ class ExportManager:
 
 
 class ExportValidator:
-    """Validátor pro export operace - OPRAVENÁ VERZE."""
+    """Validátor pro export operace."""
 
     @staticmethod
     def validate_mapping(mapping: Dict[Tuple[int, int], SampleMetadata]) -> List[str]:
@@ -278,7 +346,7 @@ class ExportValidator:
 
         for key, sample in mapping.items():
             try:
-                # OPRAVA: Validace klíče
+                # Validace klíče
                 if not isinstance(key, tuple) or len(key) != 2:
                     errors.append(f"Neplatný klíč v mapping: {key}")
                     continue
@@ -293,7 +361,7 @@ class ExportValidator:
                 if not isinstance(velocity, int) or not (0 <= velocity <= 7):
                     errors.append(f"Velocity {velocity} není v rozsahu 0-7")
 
-                # OPRAVA: Validace sample objektu
+                # Validace sample objektu
                 if not isinstance(sample, SampleMetadata):
                     errors.append(f"Sample pro MIDI {midi_note}, V{velocity} není SampleMetadata instance")
                     continue

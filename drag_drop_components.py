@@ -1,12 +1,13 @@
 """
-drag_drop_components.py - Finální konsolidovaná verze s inline MIDI editorem
+drag_drop_components.py - Refaktorované komponenty s dedikovaným drag tlačítkem - OPRAVENÉ IMPORTY
 """
 
 from typing import List, Optional, Dict, Tuple, TYPE_CHECKING
 from PySide6.QtWidgets import (QGroupBox, QVBoxLayout, QHBoxLayout, QLabel,
                                QListWidget, QListWidgetItem, QPushButton, QScrollArea,
-                               QGridLayout, QWidget, QAbstractItemView, QFrame, QApplication)
-from PySide6.QtCore import Qt, Signal, QMimeData, QTimer
+                               QGridLayout, QWidget, QAbstractItemView, QFrame, QApplication,
+                               QMessageBox)
+from PySide6.QtCore import Qt, Signal, QMimeData, QTimer  # OPRAVA: QTimer patří do QtCore
 from PySide6.QtGui import QDrag, QPainter, QColor, QPixmap, QKeyEvent, QMouseEvent
 
 from models import SampleMetadata
@@ -20,9 +21,8 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from main import MainWindow
 
-
-class DragDropListWidget(QListWidget):
-    """Seznam samples s podporou drag operací a klávesových zkratek."""
+class SimplifiedListWidget(QListWidget):
+    """Zjednodušený seznam samples BEZ drag & drop - pouze keyboard shortcuts."""
 
     play_requested = Signal(object)  # SampleMetadata
     compare_requested = Signal(object)  # SampleMetadata
@@ -30,19 +30,19 @@ class DragDropListWidget(QListWidget):
 
     def __init__(self):
         super().__init__()
-        self.setDragEnabled(True)
-        self.setDefaultDropAction(Qt.DropAction.CopyAction)
-        self.setDragDropMode(QListWidget.DragDropMode.DragOnly)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        # Lepší focus handling
+        # VYPNUTO drag & drop - nový přístup s drag tlačítky
+        self.setDragEnabled(False)
+        self.setDragDropMode(QListWidget.DragDropMode.NoDragDrop)
+
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
 
         # Pro lepší keyboard handling
         self.current_selected_sample = None
 
     def keyPressEvent(self, event: QKeyEvent):
-        """Obsluha klávesových zkratek."""
+        """Obsluha klávesových zkratek - pouze audio funkce."""
         current_item = self.currentItem()
 
         # Klávesa T - sortování podle MIDI a RMS
@@ -61,7 +61,7 @@ class DragDropListWidget(QListWidget):
             super().keyPressEvent(event)
             return
 
-        # Správné audio signály
+        # Audio signály
         if event.key() == Qt.Key.Key_Space:
             logger.debug(f"Space pressed - playing {sample.filename}")
             self.play_requested.emit(sample)
@@ -90,8 +90,9 @@ class DragDropListWidget(QListWidget):
 
     def _get_sample_from_item(self, item: QListWidgetItem) -> Optional[SampleMetadata]:
         """Získá sample z QListWidgetItem."""
-        if hasattr(item, 'sample'):
-            return item.sample
+        widget = self.itemWidget(item)
+        if widget and hasattr(widget, 'sample'):
+            return widget.sample
         return item.data(Qt.ItemDataRole.UserRole)
 
     def _emit_stop_audio(self):
@@ -142,81 +143,9 @@ class DragDropListWidget(QListWidget):
             parent = parent.parent()
         return None
 
-    def startDrag(self, dropActions):
-        """Spustí drag operaci."""
-        item = self.currentItem()
-        if not item:
-            return
-
-        # Správné získání sample z custom widget
-        sample = None
-        item_widget = self.itemWidget(item)
-        if item_widget and hasattr(item_widget, 'sample'):
-            sample = item_widget.sample
-        else:
-            sample = item.data(Qt.ItemDataRole.UserRole)
-
-        if not sample or sample.is_filtered or sample.mapped:
-            logger.debug(f"Cannot drag sample: filtered={getattr(sample, 'is_filtered', 'unknown')}, mapped={getattr(sample, 'mapped', 'unknown')}")
-            return
-
-        mime_data = QMimeData()
-        mime_data.setData("application/x-sample-metadata", str(id(sample)).encode())
-
-        drag = QDrag(self)
-        drag.setMimeData(mime_data)
-        drag.setPixmap(self._create_drag_pixmap(sample))
-
-        logger.debug(f"Starting drag for sample: {sample.filename}")
-        result = drag.exec(Qt.DropAction.MoveAction)
-        logger.debug(f"Drag result: {result}")
-
-    def mousePressEvent(self, event):
-        """Handle mouse press pro drag start."""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.drag_start_position = event.pos()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        """Handle mouse move pro drag start."""
-        if not (event.buttons() & Qt.MouseButton.LeftButton):
-            return
-
-        if not hasattr(self, 'drag_start_position'):
-            return
-
-        if ((event.pos() - self.drag_start_position).manhattanLength() <
-            QApplication.startDragDistance()):
-            return
-
-        # Start drag
-        self.startDrag(Qt.DropAction.MoveAction)
-        super().mouseMoveEvent(event)
-
-    def _create_drag_pixmap(self, sample: SampleMetadata) -> QPixmap:
-        """Vytvoří pixmap pro drag."""
-        width, height = 200, 60
-        pixmap = QPixmap(width, height)
-        pixmap.fill(QColor(173, 216, 230, 180))
-
-        painter = QPainter(pixmap)
-        painter.setPen(QColor(0, 0, 0))
-
-        painter.drawText(5, 15, sample.filename)
-
-        if sample.detected_midi:
-            note_name = MidiUtils.midi_to_note_name(sample.detected_midi)
-            painter.drawText(5, 30, f"{note_name} (MIDI {sample.detected_midi})")
-
-        if sample.velocity_amplitude:
-            painter.drawText(5, 45, f"RMS: {sample.velocity_amplitude:.6f}")
-
-        painter.end()
-        return pixmap
-
 
 class DragDropMatrixCell(QPushButton):
-    """Buňka v mapovací matici s podporou drag & drop a levého kliku pro odstranění."""
+    """Buňka v mapovací matici s podporou drag & drop - zachovává původní funkcionalitu."""
 
     sample_dropped = Signal(object, int, int)  # sample, midi_note, velocity
     sample_removed = Signal(object, int, int)  # sample, midi_note, velocity
@@ -291,7 +220,7 @@ class DragDropMatrixCell(QPushButton):
             """)
 
     def dragEnterEvent(self, event):
-        """Obsluha vstupu drag operace."""
+        """Obsluha vstupu drag operace - přijímá pouze z drag tlačítek."""
         if (event.mimeData().hasFormat("application/x-sample-metadata") or
             event.mimeData().hasFormat("application/x-matrix-sample")):
 
@@ -321,7 +250,7 @@ class DragDropMatrixCell(QPushButton):
         self._update_style()
 
     def dropEvent(self, event):
-        """Obsluha drop operace."""
+        """Obsluha drop operace - nyní z drag tlačítek."""
         if event.mimeData().hasFormat("application/x-sample-metadata"):
             self._handle_list_drop(event)
         elif event.mimeData().hasFormat("application/x-matrix-sample"):
@@ -332,7 +261,7 @@ class DragDropMatrixCell(QPushButton):
         self._update_style()
 
     def _handle_list_drop(self, event):
-        """Obsluha drop ze seznamu samples."""
+        """Obsluha drop z drag tlačítka."""
         sample_id_str = event.mimeData().data("application/x-sample-metadata").data().decode()
 
         try:
@@ -347,14 +276,12 @@ class DragDropMatrixCell(QPushButton):
             return
 
         if sample.is_filtered:
-            from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Filtrovaný sample",
                                 f"Sample {sample.filename} je filtrován (mimo amplitude rozsah).")
             event.ignore()
             return
 
         if self.sample:
-            from PySide6.QtWidgets import QMessageBox
             reply = QMessageBox.question(self, "Přepsat sample?",
                                          f"Buňka MIDI {self.midi_note}, Velocity {self.velocity} "
                                          f"už obsahuje {self.sample.filename}.\n"
@@ -402,7 +329,6 @@ class DragDropMatrixCell(QPushButton):
             return
 
         if self.sample:
-            from PySide6.QtWidgets import QMessageBox
             old_note = MidiUtils.midi_to_note_name(old_midi)
             new_note = MidiUtils.midi_to_note_name(self.midi_note)
 
@@ -471,8 +397,210 @@ class DragDropMatrixCell(QPushButton):
             QTimer.singleShot(1000, lambda: self.setStyleSheet(original_style))
 
 
+class DragDropSampleList(QGroupBox):
+    """Seznam samples s inline MIDI editorem a dedikovanými drag tlačítky."""
+
+    sample_selected = Signal(object)  # SampleMetadata
+    samples_loaded = Signal()  # Signál pro indikaci dokončení
+
+    def __init__(self):
+        super().__init__("Seznam samples s inline MIDI editory a drag tlačítky")
+        self.samples: List[SampleMetadata] = []
+        self.sample_items: List[SampleListItem] = []
+        self.current_selected_sample: Optional[SampleMetadata] = None
+        self.init_ui()
+
+    def init_ui(self):
+        """Inicializace seznamu samples."""
+        layout = QVBoxLayout()
+
+        # Info label
+        self.info_label = QLabel("Žádné samples načteny")
+        self.info_label.setStyleSheet("color: #666; font-size: 12px;")
+        layout.addWidget(self.info_label)
+
+        # Použij SimplifiedListWidget - BEZ tradičního drag & drop
+        self.sample_list = SimplifiedListWidget()
+        self.sample_list.setAlternatingRowColors(True)
+        self.sample_list.setStyleSheet("""
+            QListWidget {
+                alternate-background-color: #f8f8f8;
+                border: 2px solid #2196F3;
+                border-radius: 5px;
+            }
+            QListWidget:focus {
+                border: 3px solid #1976D2;
+                background-color: #f3f8ff;
+            }
+        """)
+        layout.addWidget(self.sample_list)
+
+        self.setLayout(layout)
+
+    def update_samples(self, samples: List[SampleMetadata]):
+        """Aktualizuje seznam samples s inline editory."""
+        self.samples = samples
+        self._rebuild_list_with_samples(samples)
+
+    def _rebuild_list_with_samples(self, samples: List[SampleMetadata]):
+        """Rebuild list s danými samples."""
+        self.sample_list.clear()
+        self.sample_items.clear()
+
+        if not samples:
+            self.info_label.setText("Žádné samples načteny")
+            return
+
+        # Statistiky
+        total_count = len(samples)
+        pitch_detected = sum(1 for s in samples if s.detected_midi is not None)
+        rms_detected = sum(1 for s in samples if s.velocity_amplitude is not None)
+        filtered_count = sum(1 for s in samples if s.is_filtered)
+        mapped_count = sum(1 for s in samples if s.mapped)
+
+        self.info_label.setText(
+            f"Načteno {total_count} samples | Pitch: {pitch_detected} | RMS: {rms_detected} | "
+            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZERNÍK/S/D/ESC/T"
+        )
+        self.info_label.setStyleSheet("color: #666; font-size: 14px; font-weight: bold;")
+
+        # Postupné vytváření items
+        self._create_items_progressively(samples)
+
+    def _create_items_progressively(self, samples: List[SampleMetadata]):
+        """Vytváří items postupně."""
+        total_samples = len(samples)
+        self.info_label.setText(f"Vytváření UI pro {total_samples} samples...")
+
+        self._items_to_create = samples.copy()
+        self._creation_timer = QTimer()
+        self._creation_timer.timeout.connect(self._create_next_item)
+        self._creation_timer.start(10)
+
+    def _create_next_item(self):
+        """Vytvoří další item v sekvenci."""
+        if not self._items_to_create:
+            self._creation_timer.stop()
+            self._finalize_samples_loading()
+            return
+
+        sample = self._items_to_create.pop(0)
+        self._create_single_sample_item(sample)
+
+        created_count = len(self.samples) - len(self._items_to_create)
+        self.info_label.setText(f"Vytváření UI: {created_count}/{len(self.samples)} samples...")
+
+    def _create_single_sample_item(self, sample: SampleMetadata):
+        """Vytvoří jeden sample item."""
+        sample_item_widget = SampleListItem(sample)
+        sample_item_widget.sample_selected.connect(self._on_sample_selected)
+        sample_item_widget.sample_play_requested.connect(self._emit_play_request)
+        sample_item_widget.midi_changed.connect(self._on_midi_changed)
+        sample_item_widget.sample_disabled_changed.connect(self._on_sample_disabled_changed)
+
+        list_item = QListWidgetItem()
+        list_item.setData(Qt.ItemDataRole.UserRole, sample)
+        list_item.setSizeHint(sample_item_widget.sizeHint())
+
+        self.sample_list.addItem(list_item)
+        self.sample_list.setItemWidget(list_item, sample_item_widget)
+        self.sample_items.append(sample_item_widget)
+
+    def _finalize_samples_loading(self):
+        """Dokončí načítání samples."""
+        self.sample_list.play_requested.connect(self._emit_play_request)
+        self.sample_list.compare_requested.connect(self._emit_compare_request)
+        self.sample_list.simultaneous_requested.connect(self._emit_simultaneous_request)
+
+        QTimer.singleShot(200, self._set_focus_to_list)
+
+        total_count = len(self.samples)
+        pitch_detected = sum(1 for s in self.samples if s.detected_midi is not None)
+        rms_detected = sum(1 for s in self.samples if s.velocity_amplitude is not None)
+        filtered_count = sum(1 for s in self.samples if s.is_filtered)
+        mapped_count = sum(1 for s in self.samples if s.mapped)
+
+        self.info_label.setText(
+            f"Načteno {total_count} samples | Pitch: {pitch_detected} | RMS: {rms_detected} | "
+            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZERNÍK/S/D/ESC/T | DRAG TLAČÍTKA AKTIVNÍ"
+        )
+
+        self.samples_loaded.emit()
+        logger.info(f"Sample list UI vytvořeno: {len(self.samples)} samples, drag tlačítka aktivní")
+
+    def _set_focus_to_list(self):
+        """Nastav focus na sample list."""
+        self.sample_list.setFocus(Qt.FocusReason.OtherFocusReason)
+
+        if self.sample_list.count() > 0:
+            self.sample_list.setCurrentRow(0)
+            first_item = self.sample_list.item(0)
+            if first_item:
+                first_widget = self.sample_list.itemWidget(first_item)
+                if first_widget and hasattr(first_widget, 'sample'):
+                    self._on_sample_selected(first_widget.sample)
+
+        logger.debug("Focus set to sample list with first item selected")
+
+    def _on_sample_disabled_changed(self, sample: SampleMetadata, disabled: bool):
+        """Handler pro změnu disable stavu sample."""
+        logger.info(f"Sample {sample.filename} disabled: {disabled}")
+
+    def _on_sample_selected(self, sample: SampleMetadata):
+        """Handler pro výběr sample."""
+        self.current_selected_sample = sample
+
+        for item_widget in self.sample_items:
+            item_widget.set_selected(item_widget.sample == sample)
+
+        self.sample_selected.emit(sample)
+
+    def _on_midi_changed(self, sample: SampleMetadata, old_midi: int, new_midi: int):
+        """Handler pro změnu MIDI noty v inline editoru."""
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, '_on_midi_note_changed'):
+                parent._on_midi_note_changed(sample, old_midi, new_midi)
+                break
+            parent = parent.parent()
+
+    def _emit_play_request(self, sample: SampleMetadata):
+        """Emit play request through parent hierarchy."""
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'safe_play_sample'):
+                parent.safe_play_sample(sample)
+                return
+            parent = parent.parent()
+
+    def _emit_compare_request(self, sample: SampleMetadata):
+        """Emit compare request."""
+        self._emit_play_request(sample)
+
+    def _emit_simultaneous_request(self, sample: SampleMetadata):
+        """Emit simultaneous request."""
+        self._emit_play_request(sample)
+
+    def refresh_display(self):
+        """Obnoví zobrazení."""
+        for item_widget in self.sample_items:
+            item_widget.refresh()
+
+    def highlight_sample_in_list(self, sample: SampleMetadata):
+        """Zvýrazní sample v seznamu."""
+        for i, item_widget in enumerate(self.sample_items):
+            if item_widget.sample == sample:
+                list_item = self.sample_list.item(i)
+                self.sample_list.setCurrentItem(list_item)
+                self.sample_list.scrollToItem(list_item, QAbstractItemView.ScrollHint.PositionAtCenter)
+
+                item_widget.set_selected(True)
+                QTimer.singleShot(1000, lambda: item_widget.set_selected(False))
+                break
+
+
 class DragDropMappingMatrix(QGroupBox):
-    """Mapovací matice s podporou drag & drop a celým piano rozsahem."""
+    """Mapovací matice - zachovává všechnu funkcionalitu včetně center-based auto-assign."""
 
     sample_mapped = Signal(object, int, int)  # sample, midi, velocity
     sample_unmapped = Signal(object, int, int)  # sample, midi, velocity
@@ -519,7 +647,8 @@ class DragDropMappingMatrix(QGroupBox):
         """Vytvoří info panel s celkovými statistikami."""
         info_layout = QHBoxLayout()
 
-        range_info_label = QLabel(f"Celý piano rozsah: A0-C8 (MIDI {self.piano_min_midi}-{self.piano_max_midi}) | Levý klik = přehrát/odstranit")
+        range_info_label = QLabel(
+            f"Celý piano rozsah: A0-C8 (MIDI {self.piano_min_midi}-{self.piano_max_midi}) | Levý klik = přehrát/odstranit")
         range_info_label.setStyleSheet("color: #666; font-size: 12px; font-weight: bold;")
         info_layout.addWidget(range_info_label)
 
@@ -573,7 +702,8 @@ class DragDropMappingMatrix(QGroupBox):
             note_name = MidiUtils.midi_to_note_name(midi_note)
             note_label = QLabel(note_name)
             note_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            note_label.setStyleSheet("background-color: #f5f5f5; padding: 3px; border-radius: 3px; font-weight: bold; font-size: 10px;")
+            note_label.setStyleSheet(
+                "background-color: #f5f5f5; padding: 3px; border-radius: 3px; font-weight: bold; font-size: 10px;")
             matrix_layout.addWidget(note_label, row, 1)
 
             # Play tlačítko pro MIDI tón
@@ -616,17 +746,17 @@ class DragDropMappingMatrix(QGroupBox):
         button = QPushButton("♪")
         button.setMaximumWidth(20)
         button.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50; 
-                color: white; 
-                font-weight: bold;
-                border-radius: 3px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-        """)
+                QPushButton {
+                    background-color: #4CAF50; 
+                    color: white; 
+                    font-weight: bold;
+                    border-radius: 3px;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background-color: #45a049;
+                }
+            """)
         button.clicked.connect(lambda: self._play_midi_note(midi_note))
         button.setToolTip(f"Přehrát MIDI tón {midi_note}")
         return button
@@ -636,17 +766,17 @@ class DragDropMappingMatrix(QGroupBox):
         button = QPushButton("⌫")
         button.setMaximumWidth(20)
         button.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336; 
-                color: white; 
-                font-weight: bold;
-                border-radius: 3px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #d32f2f;
-            }
-        """)
+                QPushButton {
+                    background-color: #f44336; 
+                    color: white; 
+                    font-weight: bold;
+                    border-radius: 3px;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background-color: #d32f2f;
+                }
+            """)
         button.clicked.connect(lambda: self._reset_note(midi_note))
         button.setToolTip(f"Odstranit všechny samples pro MIDI {midi_note}")
         return button
@@ -656,17 +786,17 @@ class DragDropMappingMatrix(QGroupBox):
         button = QPushButton("⚡")
         button.setMaximumWidth(20)
         button.setStyleSheet("""
-            QPushButton {
-                background-color: #ff9800; 
-                color: white; 
-                font-weight: bold;
-                border-radius: 3px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #f57c00;
-            }
-        """)
+                QPushButton {
+                    background-color: #ff9800; 
+                    color: white; 
+                    font-weight: bold;
+                    border-radius: 3px;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background-color: #f57c00;
+                }
+            """)
         button.clicked.connect(lambda: self._auto_assign_note(midi_note))
         button.setToolTip(f"Auto-přiřadit samples pro MIDI {midi_note} podle RMS")
         return button
@@ -690,8 +820,7 @@ class DragDropMappingMatrix(QGroupBox):
             logger.info(f"Reset note {note_name} (MIDI {midi_note}): removed {removed_count} samples")
 
     def _auto_assign_note(self, midi_note: int):
-        """Auto-přiřadí samples pro danou notu podle RMS."""
-        # Najdi všechny samples s touto MIDI notou
+        """Center-based auto-assign algoritmus."""
         matching_samples = self._find_samples_for_midi_note(midi_note)
 
         if not matching_samples:
@@ -699,61 +828,49 @@ class DragDropMappingMatrix(QGroupBox):
             logger.info(f"No samples found for auto-assign of {note_name} (MIDI {midi_note})")
             return
 
-        # Seřaď podle RMS amplitude
-        matching_samples.sort(key=lambda s: s.velocity_amplitude if s.velocity_amplitude else 0)
+        available_samples = [s for s in matching_samples if not s.mapped and s.velocity_amplitude is not None]
 
-        # Spočítej RMS rozsah
-        rms_values = [s.velocity_amplitude for s in matching_samples if s.velocity_amplitude is not None]
-        if not rms_values:
+        if not available_samples:
+            logger.info(f"No unmapped samples with RMS data available for {MidiUtils.midi_to_note_name(midi_note)}")
             return
 
+        rms_values = [s.velocity_amplitude for s in available_samples]
         min_rms = min(rms_values)
         max_rms = max(rms_values)
 
+        assigned_count = 0
+
         if min_rms == max_rms:
-            # Všechny samples mají stejnou RMS - přiřaď první do velocity 0
-            self._assign_sample_to_velocity(matching_samples[0], midi_note, 0)
+            self._assign_sample_to_velocity(available_samples[0], midi_note, 0)
             assigned_count = 1
         else:
-            # Rozdělí rozsah na 8 velocity layers
-            layer_size = (max_rms - min_rms) / 7  # 7 intervalů pro 8 layers (0-7)
-            assigned_count = 0
+            range_size = max_rms - min_rms
 
             for velocity in range(8):
-                # Spočítej RMS rozsah pro tento velocity layer
-                layer_min = min_rms + (velocity * layer_size)
-                layer_max = min_rms + ((velocity + 1) * layer_size)
+                part_start = min_rms + (velocity / 8.0) * range_size
+                part_end = min_rms + ((velocity + 1) / 8.0) * range_size
+                part_center = (part_start + part_end) / 2.0
 
-                # Najdi nejlepší sample pro tento layer
                 best_sample = None
                 best_distance = float('inf')
 
-                for sample in matching_samples:
-                    if sample.velocity_amplitude is None:
-                        continue
+                for sample in available_samples:
+                    distance = abs(sample.velocity_amplitude - part_center)
+                    if distance < best_distance:
+                        best_sample = sample
+                        best_distance = distance
 
-                    # Spočítej střed layeru a vzdálenost
-                    layer_center = (layer_min + layer_max) / 2
-                    distance = abs(sample.velocity_amplitude - layer_center)
-
-                    # Kontrola zda sample je v rozsahu layeru (s tolerancí)
-                    if layer_min <= sample.velocity_amplitude <= layer_max or distance < best_distance:
-                        if not sample.mapped:  # Pouze nemapované samples
-                            best_sample = sample
-                            best_distance = distance
-
-                # Přiřaď nejlepší sample
                 if best_sample:
                     self._assign_sample_to_velocity(best_sample, midi_note, velocity)
+                    available_samples.remove(best_sample)
                     assigned_count += 1
 
         note_name = MidiUtils.midi_to_note_name(midi_note)
         logger.info(f"Auto-assigned {assigned_count} samples for {note_name} (MIDI {midi_note}) "
-                   f"from {len(matching_samples)} available samples (RMS range: {min_rms:.6f} - {max_rms:.6f})")
+                    f"using center-based algorithm (RMS range: {min_rms:.6f} - {max_rms:.6f})")
 
     def _find_samples_for_midi_note(self, midi_note: int) -> List[SampleMetadata]:
         """Najde všechny samples s danou MIDI notou."""
-        # Najdi main window pro přístup k samples
         main_window = self._find_main_window()
         if not main_window or not hasattr(main_window, 'samples'):
             return []
@@ -761,8 +878,8 @@ class DragDropMappingMatrix(QGroupBox):
         matching_samples = []
         for sample in main_window.samples:
             if (sample.detected_midi == midi_note and
-                not sample.is_filtered and
-                sample.velocity_amplitude is not None):
+                    not sample.is_filtered and
+                    sample.velocity_amplitude is not None):
                 matching_samples.append(sample)
 
         return matching_samples
@@ -778,13 +895,10 @@ class DragDropMappingMatrix(QGroupBox):
 
     def _assign_sample_to_velocity(self, sample: SampleMetadata, midi_note: int, velocity: int):
         """Přiřadí sample na konkrétní MIDI pozici."""
-        # Odstraň starý mapping pokud existuje
         key = (midi_note, velocity)
         if key in self.mapping:
             old_sample = self.mapping[key]
             old_sample.mapped = False
-
-        # Přiřaď nový sample
         self.add_sample(sample, midi_note, velocity)
 
     def clear_matrix(self):
@@ -822,7 +936,6 @@ class DragDropMappingMatrix(QGroupBox):
                 if key in self.mapping:
                     del self.mapping[key]
                 self._update_stats()
-
                 self.sample_unmapped.emit(sample, midi_note, velocity)
 
     def _on_sample_dropped(self, sample: SampleMetadata, midi_note: int, velocity: int):
@@ -859,237 +972,3 @@ class DragDropMappingMatrix(QGroupBox):
             if cell.sample == sample:
                 return cell
         return None
-
-
-class DragDropSampleList(QGroupBox):
-    """Seznam samples s inline MIDI editorem."""
-
-    sample_selected = Signal(object)  # SampleMetadata
-    samples_loaded = Signal()  # Signál pro indikaci dokončení
-
-    def __init__(self):
-        super().__init__("Seznam samples s inline MIDI editory")
-        self.samples: List[SampleMetadata] = []
-        self.sample_items: List[SampleListItem] = []
-        self.current_selected_sample: Optional[SampleMetadata] = None
-        self.init_ui()
-
-    def init_ui(self):
-        """Inicializace seznamu samples."""
-        layout = QVBoxLayout()
-
-        # Info label
-        self.info_label = QLabel("Žádné samples načteny")
-        self.info_label.setStyleSheet("color: #666; font-size: 12px;")
-        layout.addWidget(self.info_label)
-
-        # Použij obyčejný DragDropListWidget pro keyboard handling
-        self.sample_list = DragDropListWidget()
-        self.sample_list.setAlternatingRowColors(True)
-        self.sample_list.setStyleSheet("""
-            QListWidget {
-                alternate-background-color: #f8f8f8;
-                border: 2px solid #2196F3;
-                border-radius: 5px;
-            }
-            QListWidget:focus {
-                border: 3px solid #1976D2;
-                background-color: #f3f8ff;
-            }
-        """)
-        layout.addWidget(self.sample_list)
-
-        self.setLayout(layout)
-
-    def update_samples(self, samples: List[SampleMetadata]):
-        """Aktualizuje seznam samples s inline editory."""
-        self.samples = samples
-        self._rebuild_list_with_samples(samples)
-
-    def _rebuild_list_with_samples(self, samples: List[SampleMetadata]):
-        """Rebuild list s danými samples - s delayed activation."""
-        self.sample_list.clear()
-        self.sample_items.clear()
-
-        if not samples:
-            self.info_label.setText("Žádné samples načteny")
-            return
-
-        # Statistiky
-        total_count = len(samples)
-        pitch_detected = sum(1 for s in samples if s.detected_midi is not None)
-        rms_detected = sum(1 for s in samples if s.velocity_amplitude is not None)
-        filtered_count = sum(1 for s in samples if s.is_filtered)
-        mapped_count = sum(1 for s in samples if s.mapped)
-
-        self.info_label.setText(
-            f"Načteno {total_count} samples | Pitch: {pitch_detected} | RMS: {rms_detected} | "
-            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZERNÍK/S/D/ESC/T"
-        )
-        # Zvětšení fontu v info labelu
-        self.info_label.setStyleSheet("color: #666; font-size: 14px; font-weight: bold;")
-
-        # Postupné vytváření items s progress indikací
-        self._create_items_progressively(samples)
-
-    def _create_items_progressively(self, samples: List[SampleMetadata]):
-        """Vytváří items postupně s progress indikací."""
-        total_samples = len(samples)
-
-        # Dočasně změní text
-        self.info_label.setText(f"Vytváření UI pro {total_samples} samples...")
-
-        # Proces vytváření na pozadí
-        self._items_to_create = samples.copy()
-        self._creation_timer = QTimer()
-        self._creation_timer.timeout.connect(self._create_next_item)
-        self._creation_timer.start(10)  # Vytvoří items po 10ms
-
-    def _create_next_item(self):
-        """Vytvoří další item v sekvenci."""
-        if not self._items_to_create:
-            # Dokončení
-            self._creation_timer.stop()
-            self._finalize_samples_loading()
-            return
-
-        # Vytvoř další sample item
-        sample = self._items_to_create.pop(0)
-        self._create_single_sample_item(sample)
-
-        # Aktualizuj progress
-        created_count = len(self.samples) - len(self._items_to_create)
-        self.info_label.setText(f"Vytváření UI: {created_count}/{len(self.samples)} samples...")
-
-    def _create_single_sample_item(self, sample: SampleMetadata):
-        """Vytvoří jeden sample item."""
-        # Vytvoř custom item widget
-        sample_item_widget = SampleListItem(sample)
-        sample_item_widget.sample_selected.connect(self._on_sample_selected)
-        sample_item_widget.sample_play_requested.connect(self._emit_play_request)
-        sample_item_widget.midi_changed.connect(self._on_midi_changed)
-        sample_item_widget.sample_disabled_changed.connect(self._on_sample_disabled_changed)
-
-        # Vytvoř QListWidgetItem a nastav custom widget
-        list_item = QListWidgetItem()
-        list_item.setData(Qt.ItemDataRole.UserRole, sample)
-        list_item.setSizeHint(sample_item_widget.sizeHint())
-
-        self.sample_list.addItem(list_item)
-        self.sample_list.setItemWidget(list_item, sample_item_widget)
-
-        self.sample_items.append(sample_item_widget)
-
-    def _finalize_samples_loading(self):
-        """Dokončí načítání samples a aktivuje drag & drop."""
-        # Připoj keyboard signály z list widgetu
-        self.sample_list.play_requested.connect(self._emit_play_request)
-        self.sample_list.compare_requested.connect(self._emit_compare_request)
-        self.sample_list.simultaneous_requested.connect(self._emit_simultaneous_request)
-
-        # Explicitně aktivuj drag & drop po krátkém zpoždění
-        QTimer.singleShot(100, self._activate_drag_drop)
-
-        # Nastav focus na sample list pro okamžitou použitelnost
-        QTimer.singleShot(200, self._set_focus_to_list)
-
-        # Obnov info text
-        total_count = len(self.samples)
-        pitch_detected = sum(1 for s in self.samples if s.detected_midi is not None)
-        rms_detected = sum(1 for s in self.samples if s.velocity_amplitude is not None)
-        filtered_count = sum(1 for s in self.samples if s.is_filtered)
-        mapped_count = sum(1 for s in self.samples if s.mapped)
-
-        self.info_label.setText(
-            f"Načteno {total_count} samples | Pitch: {pitch_detected} | RMS: {rms_detected} | "
-            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZERNÍK/S/D/ESC/T | D&D AKTIVNÍ"
-        )
-
-        # Emit signál dokončení
-        self.samples_loaded.emit()
-        logger.info(f"Sample list UI vytvořeno: {len(self.samples)} samples, drag & drop aktivován")
-
-    def _set_focus_to_list(self):
-        """Nastav focus na sample list pro okamžitou použitelnost."""
-        self.sample_list.setFocus(Qt.FocusReason.OtherFocusReason)
-
-        # Pokud máme items, vyber první
-        if self.sample_list.count() > 0:
-            self.sample_list.setCurrentRow(0)
-            first_item = self.sample_list.item(0)
-            if first_item:
-                first_widget = self.sample_list.itemWidget(first_item)
-                if first_widget and hasattr(first_widget, 'sample'):
-                    self._on_sample_selected(first_widget.sample)
-
-        logger.debug("Focus set to sample list with first item selected")
-
-    def _activate_drag_drop(self):
-        """Explicitně aktivuje drag & drop."""
-        # Ujisti se, že drag je enabled
-        self.sample_list.setDragEnabled(True)
-        self.sample_list.setDragDropMode(QListWidget.DragDropMode.DragOnly)
-
-        # Force repaint pro jistotu
-        self.sample_list.repaint()
-
-        logger.debug("Drag & drop explicitly activated")
-
-    def _on_sample_disabled_changed(self, sample: SampleMetadata, disabled: bool):
-        """Handler pro změnu disable stavu sample."""
-        logger.info(f"Sample {sample.filename} disabled: {disabled}")
-
-    def _on_sample_selected(self, sample: SampleMetadata):
-        """Handler pro výběr sample."""
-        self.current_selected_sample = sample
-
-        # Aktualizuj visual selection
-        for item_widget in self.sample_items:
-            item_widget.set_selected(item_widget.sample == sample)
-
-        self.sample_selected.emit(sample)
-
-    def _on_midi_changed(self, sample: SampleMetadata, old_midi: int, new_midi: int):
-        """Handler pro změnu MIDI noty v inline editoru."""
-        # Najdi parent a emit signál
-        parent = self.parent()
-        while parent:
-            if hasattr(parent, '_on_midi_note_changed'):
-                parent._on_midi_note_changed(sample, old_midi, new_midi)
-                break
-            parent = parent.parent()
-
-    def _emit_play_request(self, sample: SampleMetadata):
-        """Emit play request through parent hierarchy."""
-        parent = self.parent()
-        while parent:
-            if hasattr(parent, 'safe_play_sample'):
-                parent.safe_play_sample(sample)
-                return
-            parent = parent.parent()
-
-    def _emit_compare_request(self, sample: SampleMetadata):
-        """Emit compare request."""
-        self._emit_play_request(sample)  # Pro jednoduchost stejné jako play
-
-    def _emit_simultaneous_request(self, sample: SampleMetadata):
-        """Emit simultaneous request."""
-        self._emit_play_request(sample)  # Pro jednoduchost stejné jako play
-
-    def refresh_display(self):
-        """Obnoví zobrazení."""
-        for item_widget in self.sample_items:
-            item_widget.refresh()
-
-    def highlight_sample_in_list(self, sample: SampleMetadata):
-        """Zvýrazní sample v seznamu."""
-        for i, item_widget in enumerate(self.sample_items):
-            if item_widget.sample == sample:
-                list_item = self.sample_list.item(i)
-                self.sample_list.setCurrentItem(list_item)
-                self.sample_list.scrollToItem(list_item, QAbstractItemView.ScrollHint.PositionAtCenter)
-
-                # Temporary highlight
-                item_widget.set_selected(True)
-                QTimer.singleShot(1000, lambda: item_widget.set_selected(False))
-                break

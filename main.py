@@ -1,5 +1,5 @@
 """
-main.py - Finální konsolidovaná verze Sampler Editoru s nejnovějšími komponenty
+main.py - Finální konsolidovaná verze Sampler Editoru s refaktorizovanými drag komponenty
 """
 
 import sys
@@ -18,9 +18,10 @@ from audio_analyzer import BatchAnalyzer
 from midi_utils import MidiUtils
 from export_utils import ExportManager, ExportValidator
 
-# Import nejnovějších komponent
-from drag_drop_components import DragDropMappingMatrix, DragDropSampleList  # z v2 verze
-from audio_player import AudioPlayer  # z v3 verze
+# Import REFAKTORIZOVANÝCH komponent s drag tlačítky
+from drag_drop_sample_list import DragDropSampleList
+from drag_drop_mapping_matrix import DragDropMappingMatrix
+from audio_player import AudioPlayer
 from amplitude_analyzer import AmplitudeRangeManager
 
 # Nastavení loggingu
@@ -188,17 +189,17 @@ class FixedBatchAnalyzer(BatchAnalyzer):
 
 
 class MainWindow(QMainWindow):
-    """Hlavní okno aplikace s nejnovějšími komponenty."""
+    """Hlavní okno aplikace s refaktorizovanými drag komponenty."""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Sampler Editor - Finální verze s Inline MIDI Editorem")
-        self.resize(1600, 900)  # Širší pro inline editory
+        self.setWindowTitle("Sampler Editor - Refaktorizovaná verze s novými drag komponenty")
+        self.resize(1600, 900)
 
         self.samples = []
         self.export_manager = None
 
-        # Audio player z v3
+        # Audio player
         self.audio_player = AudioPlayer()
 
         self.init_ui()
@@ -221,12 +222,13 @@ class MainWindow(QMainWindow):
         # Splitter pro levý a pravý sloupec
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Levý sloupec: Sample list s inline editorem (30%)
+        # Levý sloupec: Sample list s drag tlačítky (30%)
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(2, 2, 2, 2)
 
-        self.sample_list = DragDropSampleList()  # z v2 verze s inline editorem
+        # REFAKTORIZOVANÁ KOMPONENTA - DragDropSampleList
+        self.sample_list = DragDropSampleList()
         self.sample_list.setMinimumWidth(300)
         self.sample_list.setMaximumWidth(600)
         left_layout.addWidget(self.sample_list)
@@ -238,7 +240,8 @@ class MainWindow(QMainWindow):
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(2, 2, 2, 2)
 
-        self.mapping_matrix = DragDropMappingMatrix()  # z v2 verze s vylepšeními
+        # REFAKTORIZOVANÁ KOMPONENTA - DragDropMappingMatrix
+        self.mapping_matrix = DragDropMappingMatrix()
         self.mapping_matrix.setMinimumWidth(800)
         right_layout.addWidget(self.mapping_matrix)
 
@@ -253,8 +256,8 @@ class MainWindow(QMainWindow):
         matrix_width = int(total_width * 0.7)
 
         splitter.setSizes([sample_list_width, matrix_width])
-        splitter.setStretchFactor(0, 3)  # Sample list má váhu 3
-        splitter.setStretchFactor(1, 7)  # Matrix má váhu 7
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 7)
 
         main_layout.addWidget(splitter)
 
@@ -284,12 +287,8 @@ class MainWindow(QMainWindow):
         """Bezpečné přehrání sample s error handlingem."""
         try:
             logger.debug(f"Playing sample: {sample.filename}")
-            # Immediate stop před novým přehráváním
             self.audio_player.stop_playback()
-
-            # Krátká pauza pro cleanup
             QTimer.singleShot(50, lambda: self.audio_player.play_sample(sample))
-
         except Exception as e:
             logger.error(f"Chyba při přehrávání {sample.filename}: {e}")
 
@@ -324,7 +323,7 @@ class MainWindow(QMainWindow):
         self.sample_list.update_samples(self.samples)
         self.mapping_matrix.clear_matrix()
 
-        self.status_panel.update_status(f"Analýza dokončena. {len(self.samples)} samples načteno s inline MIDI editory.")
+        self.status_panel.update_status(f"Analýza dokončena. {len(self.samples)} samples načteno s refaktorizovanými drag komponenty.")
 
     def set_output_folder(self, output_folder: Path):
         """Nastaví výstupní složku."""
@@ -436,28 +435,30 @@ def main():
 
         audio_status = "✓ Audio k dispozici" if AUDIO_AVAILABLE else "⚠️ Audio není k dispozici"
 
-        QMessageBox.information(window, "Sampler Editor - Finální verze",
-                                f"Sampler Editor - konsolidovaná finální verze!\n\n"
+        QMessageBox.information(window, "Sampler Editor - Refaktorizované Drag Komponenty",
+                                f"Sampler Editor - refaktorizovaná verze s novými drag komponenty!\n\n"
                                 f"Status: {audio_status}\n\n"
-                                "FUNKCE:\n"
-                                "• Inline MIDI editory u každého sample\n"
-                                "• Transpozice ±1 půltón, ±12 půltónů (oktáva)\n"
-                                "• Levý klik v matici = přehrát/odstranit\n"
-                                "• Pravý klik v matici = odstranit\n"
-                                "• Auto-assign tlačítka pro MIDI noty\n"
-                                "• Play tlačítka pro MIDI tóny\n"
-                                "• Stabilní audio přehrávání\n\n"
+                                "REFAKTORIZACE DOKONČENA:\n"
+                                "• Rozdělené komponenty do specializovaných modulů\n"
+                                "• Čitelnější a maintainovatelný kód\n"
+                                "• Lepší separation of concerns\n"
+                                "• Eliminace circular imports\n\n"
+                                "FUNKCE ZACHOVÁNY:\n"
+                                "• Dedikovaná drag tlačítka (⋮⋮) v každém řádku\n"
+                                "• Žádné konflikty mezi drag a selection\n"
+                                "• Vizuální feedback o draggable stavu\n"
+                                "• Center-based auto-assign algoritmus\n\n"
                                 "OVLÁDÁNÍ:\n"
-                                "• Inline editory: -12/-1/+1/+12 pro transpozici\n"
-                                "• Klávesy v seznamu: MEZERNÍK/S/D/ESC/T\n"
+                                "• Drag tlačítko (⋮⋮) = přetáhnout do matice\n"
+                                "• Zbytek řádku = selection, transpozice, playback\n"
                                 "• Matrix: Levý klik = přehrát, Pravý klik = odstranit\n"
                                 "• Zelená tlačítka ♪ = přehrát MIDI tón\n"
                                 "• Oranžová tlačítka ⚡ = auto-assign podle RMS\n\n"
                                 "Workflow:\n"
                                 "1. Vyberte vstupní složku → CREPE analýza\n"
                                 "2. Upravte MIDI noty inline editory\n"
-                                "3. Mapování drag & drop do matice\n"
-                                "4. Export s standardní konvencí")
+                                "3. Mapování pomocí drag tlačítek (⋮⋮)\n"
+                                "4. Export se skutečnou sample rate konverzí")
 
         sys.exit(app.exec())
 
