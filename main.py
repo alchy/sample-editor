@@ -1,5 +1,5 @@
 """
-main.py - Finální konsolidovaná verze Sampler Editoru s refaktorizovanými drag komponenty
+main.py - Finální konsolidovaná verze Sampler Editoru s asynchronním exportem
 """
 
 import sys
@@ -17,6 +17,7 @@ from models import SampleMetadata
 from audio_analyzer import BatchAnalyzer
 from midi_utils import MidiUtils
 from export_utils import ExportManager, ExportValidator
+from export_thread import ExportThread  # NOVÝ IMPORT
 
 # Import REFAKTORIZOVANÝCH komponent s drag tlačítky
 from drag_drop_sample_list import DragDropSampleList
@@ -87,6 +88,15 @@ class ControlPanel(QGroupBox):
             "QPushButton:enabled { background-color: #4CAF50; color: white; font-weight: bold; }")
         layout.addWidget(self.btn_export)
 
+        # Cancel button (skrytý dokud neprobíhá export)
+        self.btn_cancel_export = QPushButton("Zrušit")
+        self.btn_cancel_export.clicked.connect(self.cancel_export)
+        self.btn_cancel_export.setVisible(False)
+        self.btn_cancel_export.setMaximumWidth(80)
+        self.btn_cancel_export.setStyleSheet(
+            "QPushButton { background-color: #f44336; color: white; font-weight: bold; }")
+        layout.addWidget(self.btn_cancel_export)
+
         self.setLayout(layout)
         self.setMaximumHeight(60)
 
@@ -112,9 +122,21 @@ class ControlPanel(QGroupBox):
         """Signál pro export."""
         self.export_requested.emit()
 
+    def cancel_export(self):
+        """Signál pro zrušení exportu."""
+        if hasattr(self, 'parent') and hasattr(self.parent(), 'cancel_export'):
+            self.parent().cancel_export()
+
     def enable_export(self, enabled: bool):
         """Povolí/zakáže export button."""
         self.btn_export.setEnabled(enabled)
+
+    def set_export_mode(self, exporting: bool):
+        """Přepne UI do/z export módu."""
+        self.btn_export.setVisible(not exporting)
+        self.btn_cancel_export.setVisible(exporting)
+        self.btn_input_folder.setEnabled(not exporting)
+        self.btn_output_folder.setEnabled(not exporting)
 
 
 class StatusPanel(QGroupBox):
@@ -150,6 +172,15 @@ class StatusPanel(QGroupBox):
             self.progress_bar.setVisible(False)
         else:
             self.progress_bar.setVisible(True)
+
+    def show_progress(self):
+        """Zobrazí progress bar."""
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+    def hide_progress(self):
+        """Skryje progress bar."""
+        self.progress_bar.setVisible(False)
 
 
 # Vylepšený BatchAnalyzer bez duplicitní detekce
@@ -189,15 +220,16 @@ class FixedBatchAnalyzer(BatchAnalyzer):
 
 
 class MainWindow(QMainWindow):
-    """Hlavní okno aplikace s refaktorizovanými drag komponenty."""
+    """Hlavní okno aplikace s asynchronním exportem."""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Sampler Editor - Refaktorizovaná verze s novými drag komponenty")
+        self.setWindowTitle("Sampler Editor - S asynchronním exportem")
         self.resize(1600, 900)
 
         self.samples = []
         self.export_manager = None
+        self.export_thread = None  # NOVÝ ATRIBUT
 
         # Audio player
         self.audio_player = AudioPlayer()
@@ -227,7 +259,6 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(2, 2, 2, 2)
 
-        # REFAKTORIZOVANÁ KOMPONENTA - DragDropSampleList
         self.sample_list = DragDropSampleList()
         self.sample_list.setMinimumWidth(300)
         self.sample_list.setMaximumWidth(600)
@@ -240,7 +271,6 @@ class MainWindow(QMainWindow):
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(2, 2, 2, 2)
 
-        # REFAKTORIZOVANÁ KOMPONENTA - DragDropMappingMatrix
         self.mapping_matrix = DragDropMappingMatrix()
         self.mapping_matrix.setMinimumWidth(800)
         right_layout.addWidget(self.mapping_matrix)
@@ -301,9 +331,8 @@ class MainWindow(QMainWindow):
 
     def load_samples(self, input_folder: Path):
         """Načte samples ze složky a spustí analýzu."""
-        self.status_panel.progress_bar.setVisible(True)
-        self.status_panel.progress_bar.setValue(0)
-        self.status_panel.update_status("Analýza zahájena...")
+        self.status_panel.show_progress()
+        self.status_panel.update_progress(0, "Analýza zahájena...")
 
         # Použij FixedBatchAnalyzer
         self.analyzer = FixedBatchAnalyzer(input_folder)
@@ -314,7 +343,7 @@ class MainWindow(QMainWindow):
     def _on_analysis_completed(self, samples: List[SampleMetadata], range_info: dict):
         """Handler pro dokončení analýzy."""
         self.samples = [s for s in samples if s is not None]
-        self.status_panel.progress_bar.setVisible(False)
+        self.status_panel.hide_progress()
 
         if not self.samples:
             self.status_panel.update_status("Žádné validní samples nalezeny")
@@ -323,7 +352,7 @@ class MainWindow(QMainWindow):
         self.sample_list.update_samples(self.samples)
         self.mapping_matrix.clear_matrix()
 
-        self.status_panel.update_status(f"Analýza dokončena. {len(self.samples)} samples načteno s refaktorizovanými drag komponenty.")
+        self.status_panel.update_status(f"Analýza dokončena. {len(self.samples)} samples načteno.")
 
     def set_output_folder(self, output_folder: Path):
         """Nastaví výstupní složku."""
@@ -342,7 +371,7 @@ class MainWindow(QMainWindow):
         self.control_panel.enable_export(has_output and has_mapped)
 
     def export_samples(self):
-        """Export namapovaných samples."""
+        """NOVÝ ASYNCHRONNÍ EXPORT s progress barem."""
         if not self.export_manager:
             QMessageBox.warning(self, "Chyba", "Není vybrána výstupní složka")
             return
@@ -352,29 +381,74 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            # Validace před exportem
-            errors = ExportValidator.validate_mapping(self.mapping_matrix.mapping)
-            if errors:
-                QMessageBox.warning(self, "Chyba validace", "Nalezeny chyby:\n\n" + "\n".join(errors[:5]))
-                return
+            # Spusti asynchronní export
+            self.export_thread = ExportThread(
+                mapping=self.mapping_matrix.mapping,
+                output_folder=self.export_manager.output_folder
+            )
 
-            # Export
-            export_info = self.export_manager.export_mapped_samples(self.mapping_matrix.mapping)
+            # Připoj signály
+            self.export_thread.progress_updated.connect(self.status_panel.update_progress)
+            self.export_thread.export_completed.connect(self._on_export_completed)
+            self.export_thread.export_failed.connect(self._on_export_failed)
 
-            # Zobraz výsledky
-            message = (f"Export úspěšně dokončen!\n\n"
-                       f"✓ Exportováno: {export_info['exported_count']} samples\n"
-                       f"✓ Celkem souborů: {export_info['total_files']}\n"
-                       f"📁 Složka: {self.export_manager.output_folder}")
+            # UI změny
+            self.control_panel.set_export_mode(True)
+            self.status_panel.show_progress()
 
-            if export_info['failed_count'] > 0:
-                message += f"\n\n⚠️ Chyby: {export_info['failed_count']} samples"
-
-            QMessageBox.information(self, "Export dokončen", message)
+            # Spusti thread
+            self.export_thread.start()
+            logger.info("Export thread started")
 
         except Exception as e:
-            logger.error(f"Export failed: {e}")
-            QMessageBox.critical(self, "Chyba exportu", f"Chyba při exportu:\n{e}")
+            logger.error(f"Failed to start export: {e}")
+            QMessageBox.critical(self, "Chyba exportu", f"Nelze spustit export:\n{e}")
+
+    def cancel_export(self):
+        """Zruší probíhající export."""
+        if self.export_thread and self.export_thread.isRunning():
+            self.export_thread.cancel_export()
+            self.export_thread.wait(3000)  # Čekej max 3 sekundy
+
+            self.control_panel.set_export_mode(False)
+            self.status_panel.hide_progress()
+            self.status_panel.update_status("Export zrušen")
+
+            logger.info("Export cancelled by user")
+
+    def _on_export_completed(self, export_info: dict):
+        """Handler pro dokončení exportu."""
+        self.control_panel.set_export_mode(False)
+        self.status_panel.hide_progress()
+
+        # Zobraz výsledky
+        message = (f"Export úspěšně dokončen!\n\n"
+                   f"✓ Exportováno: {export_info['exported_count']} samples\n"
+                   f"✓ Celkem souborů: {export_info['total_files']}\n"
+                   f"📁 Složka: {self.export_manager.output_folder}")
+
+        if export_info['failed_count'] > 0:
+            message += f"\n\n⚠️ Chyby: {export_info['failed_count']} samples"
+
+            # Zobraz detaily chyb v separátním dialogu
+            failed_details = "\n".join([f"• {name}: {error}" for name, error in export_info['failed_files'][:10]])
+            if len(export_info['failed_files']) > 10:
+                failed_details += f"\n... a {len(export_info['failed_files']) - 10} dalších"
+
+            QMessageBox.warning(self, "Export s chybami", message + f"\n\nDetaily chyb:\n{failed_details}")
+        else:
+            QMessageBox.information(self, "Export dokončen", message)
+
+        self.status_panel.update_status(f"Export dokončen: {export_info['exported_count']} samples")
+
+    def _on_export_failed(self, error_message: str):
+        """Handler pro selhání exportu."""
+        self.control_panel.set_export_mode(False)
+        self.status_panel.hide_progress()
+        self.status_panel.update_status("Export selhal")
+
+        QMessageBox.critical(self, "Chyba exportu", f"Export selhal:\n\n{error_message}")
+        logger.error(f"Export failed: {error_message}")
 
     def _on_sample_selected(self, sample: SampleMetadata):
         """Handler pro výběr sample."""
@@ -409,6 +483,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handler pro zavření aplikace."""
+        # Zastaví probíhající export
+        if self.export_thread and self.export_thread.isRunning():
+            self.cancel_export()
+
         # Cleanup audio
         if self.audio_player:
             self.audio_player.cleanup()
@@ -435,30 +513,28 @@ def main():
 
         audio_status = "✓ Audio k dispozici" if AUDIO_AVAILABLE else "⚠️ Audio není k dispozici"
 
-        QMessageBox.information(window, "Sampler Editor - Refaktorizované Drag Komponenty",
-                                f"Sampler Editor - refaktorizovaná verze s novými drag komponenty!\n\n"
+        QMessageBox.information(window, "Sampler Editor - S asynchronním exportem",
+                                f"Sampler Editor - nyní s asynchronním exportem!\n\n"
                                 f"Status: {audio_status}\n\n"
-                                "REFAKTORIZACE DOKONČENA:\n"
-                                "• Rozdělené komponenty do specializovaných modulů\n"
-                                "• Čitelnější a maintainovatelný kód\n"
-                                "• Lepší separation of concerns\n"
-                                "• Eliminace circular imports\n\n"
-                                "FUNKCE ZACHOVÁNY:\n"
-                                "• Dedikovaná drag tlačítka (⋮⋮) v každém řádku\n"
-                                "• Žádné konflikty mezi drag a selection\n"
-                                "• Vizuální feedback o draggable stavu\n"
-                                "• Center-based auto-assign algoritmus\n\n"
+                                "NOVÉ FUNKCE:\n"
+                                "• Asynchronní export s progress barem\n"
+                                "• Možnost zrušení probíhajícího exportu\n"
+                                "• Detailní feedback o exportovaných souborech\n"
+                                "• Neblokující UI během exportu\n\n"
+                                "ZACHOVANÉ FUNKCE:\n"
+                                "• Dedikovaná drag tlačítka (⋮⋮)\n"
+                                "• Center-based auto-assign algoritmus\n"
+                                "• Skutečná sample rate konverze\n"
+                                "• Stabilní selection v sample listu\n\n"
                                 "OVLÁDÁNÍ:\n"
-                                "• Drag tlačítko (⋮⋮) = přetáhnout do matice\n"
-                                "• Zbytek řádku = selection, transpozice, playback\n"
-                                "• Matrix: Levý klik = přehrát, Pravý klik = odstranit\n"
-                                "• Zelená tlačítka ♪ = přehrát MIDI tón\n"
-                                "• Oranžová tlačítka ⚡ = auto-assign podle RMS\n\n"
+                                "• Export nyní zobrazuje progress a lze jej zrušit\n"
+                                "• Během exportu jsou ostatní operace zakázány\n"
+                                "• Detailní zprávy o tom, co se právě exportuje\n\n"
                                 "Workflow:\n"
                                 "1. Vyberte vstupní složku → CREPE analýza\n"
                                 "2. Upravte MIDI noty inline editory\n"
                                 "3. Mapování pomocí drag tlačítek (⋮⋮)\n"
-                                "4. Export se skutečnou sample rate konverzí")
+                                "4. Export s progress barem a možností zrušení")
 
         sys.exit(app.exec())
 
