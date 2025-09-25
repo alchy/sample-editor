@@ -1,5 +1,5 @@
 """
-inline_midi_editor.py - Kompaktní MIDI editor s dedikovaným drag tlačítkem - OPRAVENÝ SELECTION
+inline_midi_editor.py - Kompaktní MIDI editor s propojením na session cache - OPRAVENÁ VERZE
 """
 
 from typing import Optional
@@ -18,14 +18,14 @@ logger = logging.getLogger(__name__)
 class SampleListItem(QWidget):
     """
     Rozšířený item pro sample list s dedikovaným drag tlačítkem.
-    OPRAVENÝ selection handling a širší tlačítka.
+    OPRAVENA - propojuje MIDI změny s parent hierarchií.
     """
 
     sample_selected = Signal(object)  # sample
     sample_play_requested = Signal(object)  # sample
     midi_changed = Signal(object, int, int)  # sample, old_midi, new_midi
     sample_disabled_changed = Signal(object, bool)  # sample, disabled
-    drag_requested = Signal(object)  # sample - nový signál pro drag
+    drag_requested = Signal(object)  # sample
 
     def __init__(self, sample: SampleMetadata, parent=None):
         super().__init__(parent)
@@ -39,30 +39,30 @@ class SampleListItem(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        """Inicializuje kompaktní UI s dedikovaným drag tlačítkem - ŠIRŠÍ TLAČÍTKA."""
+        """Inicializuje kompaktní UI s dedikovaným drag tlačítkem."""
         layout = QHBoxLayout()
         layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(4)  # Zvětšený spacing
+        layout.setSpacing(4)
 
-        # DRAG TLAČÍTKO - ŠIRŠÍ pro lepší použitelnost
+        # DRAG TLAČÍTKO
         self.drag_button = self._create_drag_button()
         layout.addWidget(self.drag_button)
 
-        # Disable checkbox - trochu větší
+        # Disable checkbox
         self.disable_checkbox = QCheckBox()
         self.disable_checkbox.setChecked(self.sample.disabled)
         self.disable_checkbox.setToolTip("Zakázat použití tohoto sample")
         self.disable_checkbox.stateChanged.connect(self._on_disable_changed)
-        self.disable_checkbox.setMaximumWidth(25)  # Zvětšeno z 20
+        self.disable_checkbox.setMaximumWidth(25)
         layout.addWidget(self.disable_checkbox)
 
         # MIDI info - prioritní informace
         midi_info_layout = QHBoxLayout()
-        midi_info_layout.setSpacing(4)  # Zvětšený spacing
+        midi_info_layout.setSpacing(4)
 
-        # MIDI číslo - širší
+        # MIDI číslo
         self.midi_number_label = QLabel()
-        self.midi_number_label.setMinimumWidth(40)  # Zvětšeno z 35
+        self.midi_number_label.setMinimumWidth(40)
         self.midi_number_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
@@ -76,9 +76,9 @@ class SampleListItem(QWidget):
         """)
         midi_info_layout.addWidget(self.midi_number_label)
 
-        # Nota název - širší
+        # Nota název
         self.note_name_label = QLabel()
-        self.note_name_label.setMinimumWidth(35)  # Zvětšeno z 30
+        self.note_name_label.setMinimumWidth(35)
         self.note_name_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
@@ -92,9 +92,9 @@ class SampleListItem(QWidget):
         """)
         midi_info_layout.addWidget(self.note_name_label)
 
-        # RMS info - širší
+        # RMS info
         self.rms_label = QLabel()
-        self.rms_label.setMinimumWidth(90)  # Zvětšeno z 80
+        self.rms_label.setMinimumWidth(90)
         self.rms_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
@@ -110,12 +110,12 @@ class SampleListItem(QWidget):
 
         layout.addLayout(midi_info_layout)
 
-        # Transpozice tlačítka (širší)
+        # Transpozice tlačítka
         self._create_compact_transpose_buttons(layout)
 
-        # Play button - širší
+        # Play button
         play_btn = QPushButton("♪")
-        play_btn.setMaximumWidth(25)  # Zvětšeno z 20
+        play_btn.setMaximumWidth(25)
         play_btn.setToolTip("Přehrát sample")
         play_btn.clicked.connect(self._play_sample)
         play_btn.setStyleSheet("""
@@ -136,15 +136,15 @@ class SampleListItem(QWidget):
         layout.addStretch()
 
         self.setLayout(layout)
-        self.setMaximumHeight(32)  # Zvětšeno z 28 pro širší tlačítka
+        self.setMaximumHeight(32)
         self._update_display()
 
-        # OPRAVENÝ selection handling - pouze mouse release event
+        # Selection handling
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_file_info)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
-        """OPRAVENÝ selection handling - pouze na mouse release."""
+        """Selection handling - pouze na mouse release."""
         if event.button() == Qt.MouseButton.LeftButton:
             # Kontrola, zda klik nebyl na drag tlačítko nebo jiné interaktivní prvky
             drag_button_rect = self.drag_button.geometry()
@@ -171,13 +171,12 @@ class SampleListItem(QWidget):
         super().mouseReleaseEvent(event)
 
     def _create_drag_button(self) -> QPushButton:
-        """Vytvoří dedikované drag tlačítko - ŠIRŠÍ."""
+        """Vytvoří dedikované drag tlačítko."""
         drag_btn = QPushButton("⋮⋮")  # Vertical dots jako drag handle
-        drag_btn.setMaximumWidth(30)  # Zvětšeno z 25
-        drag_btn.setMaximumHeight(30)  # Zvětšeno z 26
+        drag_btn.setMaximumWidth(30)
+        drag_btn.setMaximumHeight(30)
         drag_btn.setToolTip("Přetáhnout do matice (Drag & Drop)")
 
-        # Styling pro drag handle - vylepšený
         drag_btn.setStyleSheet("""
             QPushButton {
                 background-color: #2196F3;
@@ -201,7 +200,7 @@ class SampleListItem(QWidget):
             }
         """)
 
-        # Drag event handling - pouze na tomto tlačítku
+        # Drag event handling
         drag_btn.mousePressEvent = self._drag_button_press
         drag_btn.mouseMoveEvent = self._drag_button_move
 
@@ -211,7 +210,6 @@ class SampleListItem(QWidget):
         """Mouse press na drag tlačítku."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_position = event.pos()
-        # Nezavoláme super() - chceme zachytit event
 
     def _drag_button_move(self, event):
         """Mouse move na drag tlačítku - spustí drag operaci."""
@@ -221,16 +219,13 @@ class SampleListItem(QWidget):
         if not hasattr(self, 'drag_start_position'):
             return
 
-        # Kontrola vzdálenosti pro drag
         distance = (event.pos() - self.drag_start_position).manhattanLength()
         if distance < QApplication.startDragDistance():
             return
 
-        # Kontrola, zda je sample draggable
         if not self._is_sample_draggable():
             return
 
-        # Spustí drag operaci
         self._start_drag_operation()
 
     def _is_sample_draggable(self) -> bool:
@@ -255,25 +250,20 @@ class SampleListItem(QWidget):
     def _start_drag_operation(self):
         """Spustí drag operaci pro tento sample."""
         try:
-            # Vytvořit MIME data
             mime_data = QMimeData()
             mime_data.setData("application/x-sample-metadata", str(id(self.sample)).encode())
 
-            # Vytvořit drag objekt
             drag = QDrag(self)
             drag.setMimeData(mime_data)
 
-            # Vytvořit drag pixmap
             pixmap = self._create_drag_pixmap()
             if pixmap and not pixmap.isNull():
                 drag.setPixmap(pixmap)
 
-            # Emit drag request signal pro logging/tracking
             self.drag_requested.emit(self.sample)
 
             logger.info(f"Starting drag operation: {self.sample.filename}")
 
-            # Spustit drag
             result = drag.exec(Qt.DropAction.MoveAction)
             logger.debug(f"Drag completed with result: {result}")
 
@@ -283,9 +273,9 @@ class SampleListItem(QWidget):
     def _create_drag_pixmap(self) -> QPixmap:
         """Vytvoří pixmap pro drag operaci."""
         try:
-            width, height = 280, 90  # Zvětšeno
+            width, height = 280, 90
             pixmap = QPixmap(width, height)
-            pixmap.fill(QColor(33, 150, 243, 200))  # Material Blue s průhledností
+            pixmap.fill(QColor(33, 150, 243, 200))
 
             painter = QPainter(pixmap)
             painter.setPen(QColor(255, 255, 255))
@@ -313,12 +303,10 @@ class SampleListItem(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to create drag pixmap: {e}")
-            return QPixmap()
-
     def _create_compact_transpose_buttons(self, layout):
-        """Vytvoří kompaktní transpozice tlačítka - ŠIRŠÍ."""
+        """Vytvoří kompaktní transpozice tlačítka."""
         transpose_layout = QHBoxLayout()
-        transpose_layout.setSpacing(2)  # Zvětšený spacing
+        transpose_layout.setSpacing(2)
 
         # -12, -1, +1, +12
         buttons_config = [
@@ -330,8 +318,8 @@ class SampleListItem(QWidget):
 
         for text, semitones, color, tooltip in buttons_config:
             btn = QPushButton(text)
-            btn.setMaximumWidth(25)  # Zvětšeno z 20
-            btn.setMaximumHeight(25)  # Zvětšeno z 20
+            btn.setMaximumWidth(25)
+            btn.setMaximumHeight(25)
             btn.clicked.connect(lambda checked, s=semitones: self._transpose(s))
             btn.setToolTip(tooltip)
             btn.setStyleSheet(f"""
@@ -383,7 +371,6 @@ class SampleListItem(QWidget):
         self.drag_button.setEnabled(draggable)
 
         if not draggable:
-            # Zobraz důvod proč není draggable
             tooltip = "Nelze přetáhnout: "
             if self.sample.disabled:
                 tooltip += "sample je zakázán"
@@ -400,7 +387,7 @@ class SampleListItem(QWidget):
     def _update_colors(self):
         """Aktualizuje barvy podle stavu."""
         if self.sample.disabled:
-            bg_color = "#ffebee"  # Světle červená
+            bg_color = "#ffebee"
             opacity = "opacity: 0.6;"
         elif self.sample.is_filtered:
             bg_color = "#e0e0e0"
@@ -409,7 +396,7 @@ class SampleListItem(QWidget):
             bg_color = "#e8f5e8"
             opacity = ""
         elif self.is_selected:
-            bg_color = "#fff3e0"  # Světle oranžová pro selection
+            bg_color = "#fff3e0"
             opacity = ""
         else:
             bg_color = "#ffffff"
@@ -432,8 +419,11 @@ class SampleListItem(QWidget):
         logger.debug(f"Sample {self.sample.filename} disabled: {self.sample.disabled}")
 
     def _transpose(self, semitones: int):
-        """Transponuje MIDI notu o zadaný počet půltónů."""
+        """
+        KLÍČOVÁ OPRAVA: Transponuje MIDI notu a emituje signál pro session cache aktualizaci.
+        """
         if not self.sample or not self.sample.detected_midi:
+            logger.warning(f"Cannot transpose {self.sample.filename}: no MIDI data")
             return
 
         old_midi = self.sample.detected_midi
@@ -443,10 +433,21 @@ class SampleListItem(QWidget):
         new_midi = max(MidiUtils.PIANO_MIN_MIDI, min(MidiUtils.PIANO_MAX_MIDI, new_midi))
 
         if new_midi != old_midi:
+            # Aktualizuj sample
             self.sample.detected_midi = new_midi
+
+            # Aktualizuj také frekvenci pro konzistenci
+            self.sample.detected_frequency = 440.0 * (2 ** ((new_midi - 69) / 12))
+
+            # Refresh UI
             self._update_display()
+
+            # KLÍČOVÉ: Emit signál pro session cache aktualizaci
             self.midi_changed.emit(self.sample, old_midi, new_midi)
-            logger.debug(f"Transposed {self.sample.filename}: MIDI {old_midi} -> {new_midi}")
+
+            logger.info(f"Transposed {self.sample.filename}: MIDI {old_midi} -> {new_midi}")
+        else:
+            logger.debug(f"Transpose for {self.sample.filename} resulted in same MIDI note: {new_midi}")
 
     def _play_sample(self):
         """Přehraje sample."""
@@ -490,6 +491,9 @@ Analyzován: {'Ano' if self.sample.analyzed else 'Ne'}
 Namapován: {'Ano' if self.sample.mapped else 'Ne'}
 Filtrován: {'Ano' if self.sample.is_filtered else 'Ne'}
 Zakázán: {'Ano' if self.sample.disabled else 'Ne'}
+
+SESSION CACHE:
+Hash: {getattr(self.sample, '_hash', 'N/A')[:8]}... if hasattr(self.sample, '_hash') else 'N/A'
 """
 
         text_edit = QTextEdit()
@@ -578,7 +582,6 @@ class InlineMidiEditor(QWidget):
 
     def _create_transpose_buttons(self, layout):
         """Vytvoří tlačítka pro transpozici."""
-
         # -12 (oktáva dolů)
         btn_oct_down = self._create_transpose_button("-12", -12, "#c0392b")
         btn_oct_down.setToolTip("Oktáva dolů")
@@ -620,7 +623,7 @@ class InlineMidiEditor(QWidget):
         return btn
 
     def _transpose(self, semitones: int):
-        """Transponuje MIDI notu o zadaný počet půltónů."""
+        """Transponuje MIDI notu o zadaný počet půltónů s propojením na session cache."""
         if not self.sample or not self.sample.detected_midi:
             return
 
@@ -632,6 +635,7 @@ class InlineMidiEditor(QWidget):
 
         if new_midi != old_midi:
             self.sample.detected_midi = new_midi
+            self.sample.detected_frequency = 440.0 * (2 ** ((new_midi - 69) / 12))
             self._update_display()
             self.midi_changed.emit(self.sample, old_midi, new_midi)
             logger.debug(f"Transposed {self.sample.filename}: MIDI {old_midi} -> {new_midi}")

@@ -1,5 +1,5 @@
 """
-drag_drop_sample_list.py - Seznam samples s inline MIDI editorem a drag tlačítky
+drag_drop_sample_list.py - Seznam samples s inline MIDI editorem a propojením na session cache
 """
 
 from typing import List, Optional
@@ -139,10 +139,11 @@ class SimplifiedListWidget(QListWidget):
 
 
 class DragDropSampleList(QGroupBox):
-    """Seznam samples s inline MIDI editorem a dedikovanými drag tlačítky."""
+    """Seznam samples s inline MIDI editorem a dedikovanými drag tlačítky - OPRAVENÁ VERZE."""
 
     sample_selected = Signal(object)  # SampleMetadata
     samples_loaded = Signal()  # Signál pro indikaci dokončení
+    midi_changed = Signal(object, int, int)  # sample, old_midi, new_midi - NOVÝ SIGNÁL
 
     def __init__(self):
         super().__init__("Seznam samples s inline MIDI editory a drag tlačítky")
@@ -201,7 +202,7 @@ class DragDropSampleList(QGroupBox):
 
         self.info_label.setText(
             f"Načteno {total_count} samples | Pitch: {pitch_detected} | RMS: {rms_detected} | "
-            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZERNÍK/S/D/ESC/T"
+            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZNÍK/S/D/ESC/T"
         )
         self.info_label.setStyleSheet("color: #666; font-size: 14px; font-weight: bold;")
 
@@ -234,9 +235,11 @@ class DragDropSampleList(QGroupBox):
     def _create_single_sample_item(self, sample: SampleMetadata):
         """Vytvoří jeden sample item."""
         sample_item_widget = SampleListItem(sample)
+
+        # KLÍČOVÉ PROPOJENÍ: Připoj MIDI změny na parent signál
         sample_item_widget.sample_selected.connect(self._on_sample_selected)
         sample_item_widget.sample_play_requested.connect(self._emit_play_request)
-        sample_item_widget.midi_changed.connect(self._on_midi_changed)
+        sample_item_widget.midi_changed.connect(self._on_midi_changed)  # NOVÉ!
         sample_item_widget.sample_disabled_changed.connect(self._on_sample_disabled_changed)
 
         list_item = QListWidgetItem()
@@ -263,7 +266,7 @@ class DragDropSampleList(QGroupBox):
 
         self.info_label.setText(
             f"Načteno {total_count} samples | Pitch: {pitch_detected} | RMS: {rms_detected} | "
-            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZERNÍK/S/D/ESC/T | DRAG TLAČÍTKA AKTIVNÍ"
+            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZNÍK/S/D/ESC/T | DRAG TLAČÍTKA AKTIVNÍ"
         )
 
         self.samples_loaded.emit()
@@ -297,13 +300,14 @@ class DragDropSampleList(QGroupBox):
         self.sample_selected.emit(sample)
 
     def _on_midi_changed(self, sample: SampleMetadata, old_midi: int, new_midi: int):
-        """Handler pro změnu MIDI noty v inline editoru."""
-        parent = self.parent()
-        while parent:
-            if hasattr(parent, '_on_midi_note_changed'):
-                parent._on_midi_note_changed(sample, old_midi, new_midi)
-                break
-            parent = parent.parent()
+        """
+        KLÍČOVÁ NOVÁ METODA: Handler pro změnu MIDI noty v inline editoru.
+        Propaguje signál výše do main window pro session cache aktualizaci.
+        """
+        logger.info(f"MIDI changed in sample list: {sample.filename} {old_midi} -> {new_midi}")
+
+        # Propaguj signál výše do parent hierarchy (main window)
+        self.midi_changed.emit(sample, old_midi, new_midi)
 
     def _emit_play_request(self, sample: SampleMetadata):
         """Emit play request through parent hierarchy."""
