@@ -1,155 +1,156 @@
-# Sampler Editor
+# Sampler Editor - Professional Version
 
-Kompletní nástroj pro analýzu, úpravu a mapování audio samples s podporou drag & drop a automatického přehrávání transponovaných tónů.
+Python sample mapping tool with pitch detection, RMS velocity analysis, and hash-based session caching.
 
-## Funkce
+## Features
 
-### Klíčové vlastnosti
-- **Celý piano rozsah**: A0-C8 (88 kláves) v jednom scrollovatelném zobrazení
-- **Automatická analýza**: Detekce MIDI noty a velocity levelů ze audio souborů
-- **Drag & Drop mapování**: Přetahování samples mezi pozicemi v mapovací matici
-- **MIDI editor**: Úprava MIDI parametrů s automatickým přehráváním transponovaných tónů
-- **Audio přehrávání**: Srovnávací přehrávání samples a referenčních tónů
-- **Export**: Standardizovaná konvence názvů (mXXX-velY-fZZ.wav)
+### Core Functionality
+- **CREPE Pitch Detection** - High-accuracy pitch detection using TensorFlow CREPE
+- **RMS Velocity Analysis** - Amplitude analysis for velocity mapping (500ms window)
+- **Drag & Drop Interface** - Visual sample mapping with dedicated drag buttons
+- **Session Management** - Project-based workflow with automatic caching
+- **Multi-format Export** - Export to 44.1kHz and 48kHz simultaneously
 
-### Audio funkce
-- **Přehrávání samples**: MEZERNÍK pro přímé přehrání
-- **Srovnávací přehrávání**: S klávesa (tón → pauza → sample)
-- **Simultánní přehrávání**: D klávesa (tón + sample současně)
-- **Referenční MIDI tóny**: Klik na MIDI čísla v matici
-- **Automatické transponované přehrávání**: Při úpravě MIDI noty
+### Advanced Features
+- **Hash-based Caching** - MD5-based sample caching for fast project reloading
+- **Piano Range Mapping** - Full A0-C8 piano range support (MIDI 21-108)
+- **Inline MIDI Editor** - Transpose samples directly in the interface
+- **Auto-assign Algorithm** - Center-based automatic velocity mapping
+- **Real-time Audio Preview** - Play samples and MIDI tones during mapping
 
-## Požadavky
+## Installation
 
-```
-Python 3.8+
-PySide6
-numpy
-librosa
-soundfile
-```
-
-## Instalace
-
+### Requirements
 ```bash
-# Klonování repository
-git clone [repository-url]
-cd sample-editor
-
-# Vytvoření virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# nebo
-.venv\Scripts\activate     # Windows
-
-# Instalace závislostí
 pip install -r requirements.txt
 ```
 
-## Spuštění
+## Quick Start
 
-```bash
-python main.py
+1. **Launch Application**
+   ```bash
+   python main.py
+   ```
+
+2. **Create/Select Session**
+   - Create new session or select existing one
+   - Sessions are stored in `sessions/` folder
+
+3. **Set Input Folder**
+   - `Ctrl+I` or File → Set Input Folder
+   - Select folder containing audio samples
+   - Automatic analysis begins (cached samples load instantly)
+
+4. **Map Samples**
+   - Use drag buttons (⋮⋮) to drag samples to matrix
+   - Or use auto-assign buttons (⚡) for automatic mapping
+   - Left-click matrix cells to play/remove samples
+
+5. **Export**
+   - `Ctrl+E` or File → Export Samples  
+   - Set output folder (`Ctrl+O`)
+   - Exports in format: `mXXX-velY-fZZ.wav`
+
+## Interface
+
+### Sample List (Left Panel)
+- **Drag Buttons (⋮⋮)** - Drag samples to mapping matrix
+- **Transpose Buttons** - Adjust pitch detection (-12, -1, +1, +12 semitones)
+- **Play Button (♪)** - Preview sample audio
+- **Disable Checkbox** - Temporarily disable sample
+
+### Mapping Matrix (Right Panel)
+- **Piano Range** - A0-C8 (MIDI 21-108)
+- **Velocity Levels** - 8 levels (V0-V7) based on RMS analysis
+- **Play MIDI (♪)** - Generate reference tones
+- **Reset (⌫)** - Clear all samples for MIDI note
+- **Auto-assign (⚡)** - Automatic velocity mapping
+
+### Keyboard Shortcuts
+- `Ctrl+N` - New Session
+- `Ctrl+I` - Input Folder
+- `Ctrl+O` - Output Folder  
+- `Ctrl+E` - Export
+- `Ctrl+K` - Clear Matrix
+- `F5` - Refresh
+- `Space` - Play selected sample
+- `ESC` - Stop audio
+- `T` - Sort samples by MIDI/RMS
+
+## Session Management
+
+Sessions automatically cache:
+- **Sample Analysis** - MD5-based caching of pitch/amplitude data
+- **MIDI Mappings** - Sample-to-MIDI position assignments
+- **Folder Paths** - Input/output folder preferences
+- **Transpozice Changes** - Modified pitch values
+
+### Session Files
+Located in `sessions/session-name.json`:
+```json
+{
+  "samples_cache": {
+    "md5_hash": {
+      "detected_midi": 60,
+      "velocity_amplitude": 0.123456,
+      "analyzed_timestamp": "2024-01-01T12:00:00"
+    }
+  },
+  "mapping": {
+    "60,0": "md5_hash"
+  }
+}
 ```
 
-## Použití
+## Export Format
 
-### 1. Načtení samples
-1. Klikněte na "Vstupní složka..." a vyberte složku s audio soubory
-2. Aplikace automaticky analyzuje všechny podporované formáty
-3. Samples se zobrazí v seznamu s detekovanými MIDI parametry
-
-### 2. Úprava MIDI parametrů
-1. Vyberte sample ze seznamu kliknutím
-2. V MIDI editoru použijte transpozice tlačítka:
-   - **+1/-1**: Půltón nahoru/dolů
-   - **+12/-12**: Oktáva nahoru/dolů
-3. Při transpozici se automaticky přehraje nový referenční tón
-4. Auto-přehrávání lze vypnout tlačítkem "Auto-přehrávání: ZAP/VYP"
-
-### 3. Mapování do matice
-1. **Drag & Drop ze seznamu**: Přetáhněte sample ze seznamu do požadované pozice v matici
-2. **Přesun v matici**: Táhněte sample mezi pozicemi v matici pro přeuspořádání
-3. **Přehrávání**: Levý klik na buňku přehraje namapovaný sample
-4. **Info**: Pravý klik na buňku zobrazí detailní informace
-
-### 4. Navigace v mapovací matici
-- **Celý piano rozsah**: A0 (MIDI 21) až C8 (MIDI 108) v jednom zobrazení
-- **Scrollování**: Vertikální scroll pro navigaci (nejvyšší frekvence nahoře)
-- **MIDI tóny**: Klik na modrá MIDI čísla přehraje referenční tón
-- **Auto-scroll**: Při výběru namapovaného sample se matice automaticky posune
-
-### 5. Export
-1. Vyberte "Výstupní složka..." pro export
-2. Klikněte "Export" pro vytvoření souborů
-3. Soubory se exportují s konvencí: `mXXX-velY-fZZ.wav`
-   - `XXX`: MIDI číslo (021-108)
-   - `Y`: Velocity level (0-7)
-   - `ZZ`: Číslo souboru při duplicitách
-
-## Klávesové zkratky
-
-### V seznamu samples
-- **MEZERNÍK**: Přehrát vybraný sample
-- **S**: Srovnávací přehrávání (referenční tón → pauza → sample)
-- **D**: Simultánní přehrávání (referenční tón + sample současně)
-
-### Globální
-- **ESC**: Zastavit přehrávání
-
-## Struktura projektu
-
+Exported files follow naming convention:
 ```
-sample-editor/
-├── main.py                     # Hlavní aplikace
-├── models.py                   # Datové modely (SampleMetadata)
-├── audio_analyzer.py           # Analýza audio souborů
-├── midi_utils.py              # MIDI utility funkce
-├── audio_player.py            # Audio přehrávání
-├── sample_editor_widget.py    # MIDI editor widget
-├── drag_drop_components.py    # Drag & drop komponenty
-├── export_utils.py            # Export functionality
-└── README.md                  # Tato dokumentace
+mXXX-velY-fZZ.wav
 ```
+- `XXX` - MIDI note number (021-108)
+- `Y` - Velocity level (0-7)
+- `ZZ` - Sample rate (44/48)
 
-## Podporované formáty
+Example: `m060-vel4-f44.wav` = Middle C, medium velocity, 44.1kHz
 
-- **Audio**: WAV, AIFF, FLAC, MP3, OGG
-- **Export**: WAV (48kHz, mono/stereo podle originálu)
+## Supported Audio Formats
 
-## Mapovací matice
+**Input:** WAV, FLAC, AIFF, MP3 (via soundfile/librosa)  
+**Output:** WAV (16-bit PCM)
 
-### Rozhraní
-- **Řádky**: MIDI noty (C8 nahoře → A0 dole)
-- **Sloupce**: Velocity levels (V0-V7)
-- **Barvy**: 
-  - Zelené buňky = namapované samples
-  - Bílé buňky = volné pozice
-  - Modré tlačítka = MIDI čísla (klik = referenční tón)
+## Workflow Example
 
-### Operace
-- **Drop ze seznamu**: Nové mapování
-- **Drop v matici**: Přesun mezi pozicemi
-- **Přepsání**: Potvrzovací dialog při kolizi
-- **Auto-scroll**: Na pozici vybraného sample
+1. Create session "DrumKit2024"
+2. Set input folder to `/samples/kicks/`
+3. Analysis detects 12 samples, caches results
+4. Auto-assign samples to C2 (MIDI 36) across 8 velocity levels
+5. Manual adjustment: transpose kick_07.wav from C2 to C#2
+6. Export generates 24 files (12 samples × 2 sample rates)
+7. Next session reload: instant loading from cache
 
-## MIDI Editor
+## Troubleshooting
 
-### Zobrazení
-- **MIDI Nota**: Aktuální nota sample (např. C4 (60))
-- **Velocity**: Detekovaná úroveň hlasitosti
-- **Confidence**: Přesnost pitch detekce
+**No audio playback:**
+- Install: `pip install sounddevice soundfile`
+- Check system audio device
 
-### Transpozice
-- **Půltóny**: +1/-1 tlačítka (červená/zelená)
-- **Oktávy**: +12/-12 tlačítka (tmavě červená/zelená)
-- **Auto-přehrávání**: Automatické přehrání nového tónu po transpozici
-- **Manuální přehrání**: Tlačítko "Přehrát tón"
+**Analysis too slow:**
+- First run always slower (CREPE model loading)
+- Subsequent runs use cached results
 
-## Tipy pro použití
+**Export fails:**
+- Verify output folder write permissions
+- Check available disk space
 
-1. **Rychlá navigace**: Použijte scroll wheel pro rychlou navigaci v matici
-2. **Batch mapování**: Vyberte správnou velocity úroveň před drag & drop
-3. **Audio porovnání**: Použijte S klávesu pro srovnání s referenčním tónem
-4. **Transpozice**: Upravte MIDI notu před mapováním pro přesnější výsledky
-5. **Organizace**: Využijte celý rozsah matice pro logické rozmístění samples
+## Technical Details
+
+- **Framework:** PySide6 (Qt6)
+- **Audio Processing:** librosa, soundfile
+- **Pitch Detection:** TensorFlow CREPE
+- **Session Storage:** JSON with MD5 hashing
+- **Architecture:** Multi-threaded analysis, async export
+
+## License
+
+Professional sample editor for music production workflows.
