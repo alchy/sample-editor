@@ -663,7 +663,25 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handler pro zavření aplikace."""
+        # EXPLICITNÍ ULOŽENÍ VŠECH DAT před zavřením
+        logger.info("Closing application - saving all session data...")
+
+        # 1. Ulož mapping
         self._save_session_state()
+
+        # 2. NOVÉ: Ulož VŠECHNY samples do cache (i ty které už byly cached)
+        #    Tím zajistíme že se uloží i transpozice a další změny
+        if self.samples and self.session_manager.session_data:
+            logger.info(f"Saving {len(self.samples)} samples to cache before closing...")
+            try:
+                self.session_manager.cache_analyzed_samples(self.samples)
+                logger.info("✓ All samples cached successfully")
+            except Exception as e:
+                logger.error(f"Failed to cache samples on close: {e}")
+
+        # 3. Finální explicitní close session (vyvolá _save_session())
+        self.session_manager.close_session()
+        logger.info("✓ Session closed and saved")
 
         if self.export_thread and self.export_thread.isRunning():
             self.cancel_export()

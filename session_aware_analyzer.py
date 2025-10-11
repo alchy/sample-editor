@@ -11,6 +11,7 @@ ZMĚNY:
 import logging
 from pathlib import Path
 from typing import List, Set, Dict, Any
+from datetime import datetime
 from PySide6.QtCore import QThread, Signal
 
 from src.domain.models.sample import SampleMetadata
@@ -229,22 +230,42 @@ class SessionAwareBatchAnalyzer(QThread):
             # Cache the newly analyzed samples pomocí SessionService
             if analyzed_samples:
                 # SessionService má již cache_samples metodu přes analyze_with_cache
-                # Zde jen ujistíme, že samples mají hash
+                # Zde jen ujistíme, že samples mají hash a ukládáme KOMPLETNÍ data
                 for sample in analyzed_samples:
                     if not hasattr(sample, '_hash'):
                         file_hash = self.session_service.cache.calculate_file_hash(sample.filepath)
                         sample._hash = file_hash
 
-                    # Ulož do cache
+                    # OPRAVA: Ulož KOMPLETNÍ cache data (ne jen 4 pole!)
+                    # Musíme zahrnout všechna pole která _validate_cached_data() očekává
                     cached_data = {
+                        # Basic file info
                         'filename': sample.filename,
-                        'detected_midi': sample.detected_midi,
-                        'detected_frequency': sample.detected_frequency,
-                        'velocity_amplitude': sample.velocity_amplitude
+                        'file_path': str(sample.filepath),
+
+                        # Pitch detection results (převod na Python typy)
+                        'detected_midi': int(sample.detected_midi) if sample.detected_midi is not None else None,
+                        'detected_frequency': float(sample.detected_frequency) if sample.detected_frequency is not None else None,
+                        'pitch_confidence': float(sample.pitch_confidence) if sample.pitch_confidence is not None else None,
+                        'pitch_method': str(sample.pitch_method) if sample.pitch_method else 'crepe',
+
+                        # Amplitude analysis results (primary)
+                        'velocity_amplitude': float(sample.velocity_amplitude) if sample.velocity_amplitude is not None else None,
+                        'velocity_amplitude_db': float(sample.velocity_amplitude_db) if sample.velocity_amplitude_db is not None else None,
+                        'velocity_duration_ms': float(sample.velocity_duration_ms) if sample.velocity_duration_ms is not None else None,
+
+                        # Audio properties
+                        'duration': float(sample.duration) if sample.duration is not None else None,
+                        'sample_rate': int(sample.sample_rate) if sample.sample_rate is not None else None,
+                        'channels': int(sample.channels) if sample.channels is not None else None,
+
+                        # Cache metadata (set_cache() je přidá, ale přidáme zde pro jistotu)
+                        'analyzed_timestamp': datetime.now().isoformat(),
+                        'cache_version': '2.0'
                     }
                     self.session_service.cache.set_cache(sample._hash, cached_data)
 
-                logger.info(f"Cached {len(analyzed_samples)} newly analyzed samples")
+                logger.info(f"Cached {len(analyzed_samples)} newly analyzed samples with complete data")
 
             # Merge cached and newly analyzed samples
             all_samples = self.cached_samples + analyzed_samples
