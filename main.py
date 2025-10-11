@@ -1,10 +1,12 @@
 """
-main.py - Sampler Editor - vstupní bod aplikace
+main.py - Sampler Editor - vstupní bod aplikace s graceful shutdown
 """
 
 import sys
+import signal
 import logging
 from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QTimer
 
 from main_window import MainWindow
 
@@ -13,12 +15,42 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+def setup_signal_handlers(app, window):
+    """
+    Nastaví signal handlers pro graceful shutdown.
+
+    Zachycuje SIGTERM (kill) a SIGINT (Ctrl+C) pro správné uložení dat.
+    """
+    def signal_handler(signum, frame):
+        """Handler pro system signály - zajistí graceful shutdown."""
+        signal_name = signal.Signals(signum).name
+        logger.info(f"Received signal {signal_name} ({signum}) - initiating graceful shutdown...")
+
+        # Qt vyžaduje aby GUI operace běžely v main threadu
+        # Použijeme QTimer.singleShot pro bezpečné volání closeEvent
+        QTimer.singleShot(0, window.close)
+
+    # Registruj handlery pro Windows i Unix
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # kill command
+
+    # Windows má navíc SIGBREAK (Ctrl+Break)
+    if hasattr(signal, 'SIGBREAK'):
+        signal.signal(signal.SIGBREAK, signal_handler)
+
+    logger.info("✓ Signal handlers registered (SIGINT, SIGTERM)")
+
+
 def main():
     """Hlavní funkce aplikace."""
     app = QApplication(sys.argv)
 
     try:
         window = MainWindow()
+
+        # NOVÉ: Nastav signal handlers pro graceful shutdown
+        setup_signal_handlers(app, window)
+
         window.show()
 
         # Zobraz tip při spuštění (volitelné)
