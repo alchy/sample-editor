@@ -44,25 +44,26 @@ class SampleListItem(QWidget):
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(4)
 
-        # DRAG TLAČÍTKO
+        # DRAG TLAČÍTKO - fixed width pro zarovnání
         self.drag_button = self._create_drag_button()
         layout.addWidget(self.drag_button)
 
-        # Disable checkbox
+        # Disable checkbox - fixed width pro zarovnání
         self.disable_checkbox = QCheckBox()
         self.disable_checkbox.setChecked(self.sample.disabled)
         self.disable_checkbox.setToolTip("Zakázat použití tohoto sample")
         self.disable_checkbox.stateChanged.connect(self._on_disable_changed)
-        self.disable_checkbox.setMaximumWidth(25)
+        self.disable_checkbox.setFixedWidth(25)
         layout.addWidget(self.disable_checkbox)
 
-        # MIDI info - prioritní informace
+        # MIDI info - prioritní informace s FIXED widths pro zarovnání do sloupců
         midi_info_layout = QHBoxLayout()
         midi_info_layout.setSpacing(4)
 
-        # MIDI číslo
+        # MIDI číslo - FIXED WIDTH
         self.midi_number_label = QLabel()
-        self.midi_number_label.setMinimumWidth(40)
+        self.midi_number_label.setFixedWidth(45)  # Fixed místo minimum
+        self.midi_number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.midi_number_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
@@ -76,9 +77,10 @@ class SampleListItem(QWidget):
         """)
         midi_info_layout.addWidget(self.midi_number_label)
 
-        # Nota název
+        # Nota název - FIXED WIDTH
         self.note_name_label = QLabel()
-        self.note_name_label.setMinimumWidth(35)
+        self.note_name_label.setFixedWidth(45)  # Fixed místo minimum
+        self.note_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.note_name_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
@@ -92,9 +94,10 @@ class SampleListItem(QWidget):
         """)
         midi_info_layout.addWidget(self.note_name_label)
 
-        # RMS info
+        # RMS info - FIXED WIDTH
         self.rms_label = QLabel()
-        self.rms_label.setMinimumWidth(90)
+        self.rms_label.setFixedWidth(100)  # Fixed místo minimum
+        self.rms_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.rms_label.setStyleSheet("""
             QLabel {
                 font-weight: bold;
@@ -288,8 +291,9 @@ class SampleListItem(QWidget):
             logger.error(f"Failed to create drag pixmap: {e}")
     def _create_compact_transpose_buttons_group(self, layout):
         """Vytvoří transpozice tlačítka v rounded boxu (konzistentní s RMS/MIDI stylem)."""
-        # Container frame pro rounded box
+        # Container frame pro rounded box - FIXED WIDTH pro zarovnání
         transpose_frame = QFrame()
+        transpose_frame.setFixedWidth(135)  # Fixed width pro column alignment
         transpose_frame.setStyleSheet("""
             QFrame {
                 background-color: #fff9e6;
@@ -313,7 +317,7 @@ class SampleListItem(QWidget):
 
         for text, semitones, color, tooltip in buttons_config:
             btn = QPushButton(text)
-            btn.setMaximumWidth(28)
+            btn.setFixedWidth(28)  # Fixed width
             btn.setMaximumHeight(24)
             btn.clicked.connect(lambda checked, s=semitones: self._transpose(s))
             btn.setToolTip(tooltip)
@@ -337,8 +341,9 @@ class SampleListItem(QWidget):
 
     def _create_play_button_group(self, layout):
         """Vytvoří play button v rounded boxu s větší šířkou a ikonou noty."""
-        # Container frame pro rounded box
+        # Container frame pro rounded box - FIXED WIDTH pro zarovnání
         play_frame = QFrame()
+        play_frame.setFixedWidth(60)  # Fixed width pro column alignment
         play_frame.setStyleSheet("""
             QFrame {
                 background-color: #e8f5e9;
@@ -352,9 +357,9 @@ class SampleListItem(QWidget):
         play_layout.setContentsMargins(3, 2, 3, 2)
         play_layout.setSpacing(0)
 
-        # Play button s větší šířkou
+        # Play button s fixed šířkou
         play_btn = QPushButton("♪")
-        play_btn.setMinimumWidth(45)  # Větší šířka
+        play_btn.setFixedWidth(48)  # Fixed width pro column alignment
         play_btn.setMaximumHeight(24)
         play_btn.setToolTip("Přehrát sample")
         play_btn.clicked.connect(self._play_sample)

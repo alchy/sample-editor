@@ -146,7 +146,7 @@ class DragDropSampleList(QGroupBox):
     midi_changed = Signal(object, int, int)  # sample, old_midi, new_midi - NOVÝ SIGNÁL
 
     def __init__(self):
-        super().__init__("Seznam samples s inline MIDI editory a drag tlačítky")
+        super().__init__("Samples")
         self.samples: List[SampleMetadata] = []
         self.sample_items: List[SampleListItem] = []
         self.current_selected_sample: Optional[SampleMetadata] = None

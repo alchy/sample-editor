@@ -25,6 +25,15 @@ except ImportError as e:
     AUDIO_AVAILABLE = False
     logger.warning(f"Audio libraries not available: {e}")
 
+# MIDI knihovna (preferovaná pro playback)
+try:
+    import mido
+    MIDI_AVAILABLE = True
+    logger.info("✓ mido MIDI library available")
+except ImportError:
+    MIDI_AVAILABLE = False
+    logger.info("mido not available - will use audio tone fallback")
+
 
 class AudioCommand(Enum):
     """Typy příkazů pro audio worker."""
@@ -60,8 +69,31 @@ class AudioWorker:
         self.current_stream = None
         self.auto_stop_event = threading.Event()
 
-        if not AUDIO_AVAILABLE:
-            logger.warning("AudioWorker initialized but audio libraries not available")
+        # MIDI port management
+        self.midi_port = None
+        self.midi_available_ports = []
+        self._setup_midi()
+
+        if not AUDIO_AVAILABLE and not MIDI_AVAILABLE:
+            logger.warning("AudioWorker initialized but no audio/MIDI libraries available")
+
+    def _setup_midi(self):
+        """Nastaví MIDI output port (preferovaná metoda pro playback)."""
+        if not MIDI_AVAILABLE:
+            return
+
+        try:
+            self.midi_available_ports = mido.get_output_names()
+            if self.midi_available_ports:
+                # Zkus otevřít první dostupný port
+                self.midi_port = mido.open_output(self.midi_available_ports[0])
+                logger.info(f"✓ MIDI port opened: {self.midi_available_ports[0]}")
+                logger.info(f"  Available ports: {self.midi_available_ports}")
+            else:
+                logger.info("No MIDI ports available - will use audio tone fallback")
+        except Exception as e:
+            logger.warning(f"Could not open MIDI port: {e} - will use audio tone fallback")
+            self.midi_port = None
 
     def start(self):
         """Spustí worker thread."""
@@ -222,55 +254,105 @@ class AudioWorker:
             logger.error(f"Error stopping playback: {e}")
 
     def _handle_play_tone(self, task: AudioTask):
-        """Přehraje MIDI tón."""
+        """
+        Přehraje MIDI tón - preferuje MIDI port přes mido, fallback na audio tón.
+
+        Metoda 1 (preferovaná): Pošli MIDI message přes mido port
+        Metoda 2 (fallback): Generuj sinusový tón přes sounddevice
+        """
         midi_note = task.data.get('midi_note')
         callback = task.callback
 
-        try:
-            # Zastaví předchozí přehrávání
-            if self.is_playing:
-                sd.stop()
-                time.sleep(0.05)  # Krátká pauza pro uvolnění
+        # Validace
+        if not (21 <= midi_note <= 108):
+            error = f"MIDI note {midi_note} out of range"
+            logger.warning(error)
+            if callback:
+                callback(success=False, error=error)
+            return
 
-            # Validace
-            if not (21 <= midi_note <= 108):
-                error = f"MIDI note {midi_note} out of range"
-                logger.warning(error)
-                if callback:
-                    callback(success=False, error=error)
+        # METODA 1: MIDI přes mido (PREFEROVANÁ - nejvíce spolehlivá!)
+        if self.midi_port:
+            try:
+                self._play_midi_via_port(midi_note, callback)
                 return
+            except Exception as e:
+                logger.warning(f"MIDI port playback failed: {e}, falling back to audio tone")
+                # Fallback na metodu 2
 
-            # Generuj tón
-            sample_rate = 44100
-            duration = 2.0
-            frequency = 440.0 * (2 ** ((midi_note - 69) / 12))
-
-            t = np.linspace(0, duration, int(sample_rate * duration))
-            tone = np.sin(2 * np.pi * frequency * t)
-
-            # Envelope
-            fade_samples = int(sample_rate * 0.05)
-            if len(tone) > 2 * fade_samples:
-                tone[:fade_samples] *= np.linspace(0, 1, fade_samples)
-                tone[-fade_samples:] *= np.linspace(1, 0, fade_samples)
-
-            tone *= 0.4  # Volume
-
-            # Přehraj (blocking v worker threadu je OK!)
-            self.is_playing = True
-            sd.play(tone, sample_rate, blocking=True)  # BLOCKING je OK v worker threadu!
-            self.is_playing = False
-
-            logger.info(f"✓ MIDI tone {midi_note} ({frequency:.1f} Hz) played successfully")
-
+        # METODA 2: Audio tón přes sounddevice (fallback)
+        if AUDIO_AVAILABLE:
+            try:
+                self._play_audio_tone(midi_note, callback)
+                return
+            except Exception as e:
+                logger.error(f"Audio tone playback failed: {e}", exc_info=True)
+                if callback:
+                    callback(success=False, error=str(e))
+        else:
+            error = "No playback method available (no MIDI port, no audio)"
+            logger.error(error)
             if callback:
-                callback(success=True, midi_note=midi_note, frequency=frequency)
+                callback(success=False, error=error)
 
-        except Exception as e:
-            logger.error(f"Error playing MIDI tone {midi_note}: {e}", exc_info=True)
-            self.is_playing = False
-            if callback:
-                callback(success=False, error=str(e))
+    def _play_midi_via_port(self, midi_note: int, callback=None):
+        """Přehraje MIDI notu přes mido port (NEJSPOLEHLIVĚJŠÍ METODA)."""
+        velocity = 80  # Standard velocity
+        duration = 1.0  # 1 sekunda
+
+        # Send note_on
+        msg_on = mido.Message('note_on', note=midi_note, velocity=velocity)
+        self.midi_port.send(msg_on)
+        self.is_playing = True
+
+        logger.debug(f"MIDI note_on: {midi_note}, velocity={velocity}")
+
+        # Wait for duration
+        time.sleep(duration)
+
+        # Send note_off
+        msg_off = mido.Message('note_off', note=midi_note, velocity=0)
+        self.midi_port.send(msg_off)
+        self.is_playing = False
+
+        frequency = 440.0 * (2 ** ((midi_note - 69) / 12))
+        logger.info(f"✓ MIDI note {midi_note} ({frequency:.1f} Hz) played via MIDI port")
+
+        if callback:
+            callback(success=True, midi_note=midi_note, frequency=frequency, method="MIDI")
+
+    def _play_audio_tone(self, midi_note: int, callback=None):
+        """Přehraje audio tón přes sounddevice (fallback metoda)."""
+        # Zastaví předchozí přehrávání
+        if self.is_playing:
+            sd.stop()
+            time.sleep(0.05)
+
+        # Generuj tón
+        sample_rate = 44100
+        duration = 1.0  # Zkráceno z 2.0 na 1.0 pro rychlejší response
+        frequency = 440.0 * (2 ** ((midi_note - 69) / 12))
+
+        t = np.linspace(0, duration, int(sample_rate * duration))
+        tone = np.sin(2 * np.pi * frequency * t)
+
+        # Envelope
+        fade_samples = int(sample_rate * 0.05)
+        if len(tone) > 2 * fade_samples:
+            tone[:fade_samples] *= np.linspace(0, 1, fade_samples)
+            tone[-fade_samples:] *= np.linspace(1, 0, fade_samples)
+
+        tone *= 0.4  # Volume
+
+        # Přehraj (blocking v worker threadu je OK!)
+        self.is_playing = True
+        sd.play(tone, sample_rate, blocking=True)
+        self.is_playing = False
+
+        logger.info(f"✓ MIDI tone {midi_note} ({frequency:.1f} Hz) played via audio")
+
+        if callback:
+            callback(success=True, midi_note=midi_note, frequency=frequency, method="Audio")
 
     def _handle_play_sample(self, task: AudioTask):
         """Přehraje audio sample."""
@@ -312,12 +394,24 @@ class AudioWorker:
 
     def _cleanup(self):
         """Cleanup při ukončení workeru."""
+        # Stop audio playback
         try:
-            if self.is_playing:
+            if self.is_playing and AUDIO_AVAILABLE:
                 sd.stop()
                 self.is_playing = False
         except:
             pass
+
+        # Close MIDI port
+        if self.midi_port:
+            try:
+                # Send all notes off
+                all_notes_off = mido.Message('control_change', control=123, value=0)
+                self.midi_port.send(all_notes_off)
+                self.midi_port.close()
+                logger.info("✓ MIDI port closed")
+            except:
+                pass
 
 
 # Globální singleton instance
