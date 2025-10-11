@@ -30,6 +30,10 @@ class SessionManager:
         self.current_session = None
         self.session_data = None
 
+        # Pro kompatibilitu s novým refaktorovaným kódem
+        # Vytvoř "cache" atribut který deleguje na self
+        self.cache = self  # SessionManager sám implementuje cache metody
+
     def get_available_sessions(self) -> List[str]:
         """Vrátí seznam dostupných session souborů."""
         session_files = list(self.sessions_folder.glob("session-*.json"))
@@ -112,6 +116,27 @@ class SessionManager:
         except Exception as e:
             logger.error(f"Failed to load session {session_name}: {e}")
             return False
+
+    def analyze_with_cache(self, samples: List[SampleMetadata]) -> Tuple[
+        List[SampleMetadata], List[SampleMetadata]]:
+        """
+        KOMPATIBILNÍ METODA: Analyzuje samples s použitím cache (bez input_folder).
+
+        Tato metoda je pro kompatibilitu s novým refaktorovaným kódem.
+        Input folder se extrahuje z prvního sample.
+
+        Args:
+            samples: Seznam SampleMetadata objektů k analýze
+
+        Returns:
+            Tuple[cached_samples, samples_to_analyze]
+        """
+        if not samples:
+            return [], []
+
+        # Extrahuj input folder z prvního sample
+        input_folder = samples[0].filepath.parent
+        return self.analyze_folder_with_cache(input_folder, samples)
 
     def analyze_folder_with_cache(self, input_folder: Path, samples: List[SampleMetadata]) -> Tuple[
         List[SampleMetadata], List[SampleMetadata]]:
@@ -564,6 +589,33 @@ class SessionManager:
     def _get_session_file(self, session_name: str) -> Path:
         """Vrátí cestu k session souboru."""
         return self.sessions_folder / f"session-{session_name}.json"
+
+    def calculate_file_hash(self, file_path: Path) -> str:
+        """
+        VEŘEJNÁ METODA pro kompatibilitu: Spočítá MD5 hash celého souboru.
+
+        Args:
+            file_path: Cesta k souboru
+
+        Returns:
+            MD5 hash jako hexadecimální string
+        """
+        return self._calculate_file_hash(file_path)
+
+    def set_cache(self, file_hash: str, cached_data: dict):
+        """
+        KOMPATIBILNÍ METODA: Uloží data do cache pod daným hashem.
+
+        Args:
+            file_hash: MD5 hash souboru
+            cached_data: Data k uložení
+        """
+        if not self.session_data:
+            logger.warning("No session data available for caching")
+            return
+
+        self.session_data["samples_cache"][file_hash] = cached_data
+        # Auto-save po každém cache zápisu není nutný, uložíme při zavírání
 
     def _calculate_file_hash(self, file_path: Path) -> str:
         """VYLEPŠENÁ METODA: Spočítá MD5 hash celého souboru s lepším error handlingem."""
