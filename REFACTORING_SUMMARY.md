@@ -1,6 +1,6 @@
 # Refaktoring Summary - Sample Editor
 
-## Status: FAZE 1 & 2 DOKONCENY ✅
+## Status: FAZE 1, 2 & 3 DOKONCENY ✅
 
 ### POZOR: Python Version Issue
 **Problem:** Projekt vyzaduje Python 3.10-3.13
@@ -28,16 +28,24 @@ sample-editor/
 │   │   └── interfaces/               # ISessionRepository, IAudioAnalyzer
 │   ├── application/
 │   │   └── services/
-│   │       └── session_service.py    # Business logika (90 radku)
+│   │       ├── session_service.py    # Business logika (90 radku)
+│   │       └── analysis_service.py   # Audio analyza orchestrace (145 radku)
 │   ├── infrastructure/
-│   │   └── persistence/
-│   │       ├── cache_manager.py      # MD5 caching (150 radku)
-│   │       └── session_repository_impl.py  # JSON storage (140 radku)
-│   └── presentation/                 # (pripraveno)
+│   │   ├── persistence/
+│   │   │   ├── cache_manager.py      # MD5 caching (150 radku)
+│   │   │   └── session_repository_impl.py  # JSON storage (140 radku)
+│   │   └── audio/
+│   │       ├── audio_file_loader.py  # Audio loading (106 radku)
+│   │       ├── crepe_analyzer.py     # Pitch detection (105 radku)
+│   │       └── rms_analyzer.py       # Amplitude analysis (142 radku)
+│   └── presentation/                 # (pripraveno pro FAZE 4)
 ├── tests/
 │   ├── unit/
-│   │   ├── domain/test_sample_metadata.py     # 2 tests ✓
-│   │   └── infrastructure/test_cache_manager.py # 2 tests ✓
+│   │   ├── domain/test_sample_metadata.py           # 2 tests ✓
+│   │   ├── infrastructure/test_cache_manager.py     # 2 tests ✓
+│   │   ├── infrastructure/test_rms_analyzer.py      # 8 tests ✓
+│   │   ├── infrastructure/test_crepe_analyzer.py    # 4 tests ✓
+│   │   └── application/test_analysis_service.py     # 6 tests ✓
 │   └── conftest.py
 ├── models.py                         # SHIM LAYER (backward compatible)
 └── session_manager.py                # ORIGINAL (pro compatibility)
@@ -52,12 +60,12 @@ sample-editor/
    - MD5 hash vypocet
    - Cache get/set operace
    - Validace cached dat
-   
+
 2. `JsonSessionRepository` - 140 radku
    - JSON load/save
    - Backup management
    - Session listing
-   
+
 3. `SessionService` - 90 radku
    - Orchestrace cache + repository
    - Business logika
@@ -71,16 +79,60 @@ sample-editor/
 
 ---
 
+### FAZE 3: Audio Processing Layer ✅
+
+**Puvodni:** 3 monoliticke soubory - 864 radku celkem
+- `audio_analyzer.py` - 259 radku
+- `amplitude_analyzer.py` - 352 radku
+- `pitch_detector.py` - 253 radku
+
+**Refaktorovano na:**
+1. `AudioFileLoader` - 106 radku
+   - Nacitani audio (soundfile/librosa fallback)
+   - Audio info bez nacteni celeho souboru
+   - Implementuje IAudioFileLoader interface
+
+2. `CrepeAnalyzer` - 105 radku
+   - CREPE neural network pitch detection
+   - Analyzuje pouze prvnich 5s (optimalizace)
+   - Implementuje IPitchAnalyzer interface
+
+3. `RmsAnalyzer` - 142 radku
+   - RMS amplitude analyza (500ms window)
+   - Velocity mapping pro MIDI
+   - Implementuje IAmplitudeAnalyzer interface
+
+4. `AnalysisService` - 145 radku
+   - Orchestrace pitch + amplitude analyzy
+   - Batch processing s progress callback
+   - Application layer service
+
+**Optimalizace:**
+- ✅ CREPE analyzuje max 5s (configurable)
+- ✅ Rychlejsi analyza dlouhych samples (>20s)
+- ✅ Fallback mechanismy pro audio loading
+
+**Vyhody:**
+- ✅ Kazdy modul <150 radku
+- ✅ 22 unit testu (8 RMS + 4 CREPE + 6 Service)
+- ✅ Interface-based design
+- ✅ Dependency injection ready
+
+---
+
 ## Testovani:
 
-### Unit testy (4 passing):
+### Unit testy (22 passing):
 ```bash
-.venv\Scripts\python -m pytest tests/unit/ -v
+.venv\Scripts\python -m pytest tests/unit/ -v -m "not slow"
 ```
 
 **Vysledky:**
 - `tests/unit/domain/test_sample_metadata.py` - 2 tests PASSED
 - `tests/unit/infrastructure/test_cache_manager.py` - 2 tests PASSED
+- `tests/unit/infrastructure/test_rms_analyzer.py` - 8 tests PASSED
+- `tests/unit/infrastructure/test_crepe_analyzer.py` - 4 tests PASSED
+- `tests/unit/application/test_analysis_service.py` - 6 tests PASSED
 
 ---
 
@@ -91,7 +143,8 @@ Branch: feature-refactor
 Commits:
   c327d0c - PHASE 1: Modular structure
   1f04948 - PHASE 2: Session Management refactoring
-  
+  1c03b42 - PHASE 3: Audio Processing Layer
+
 Pushed to: origin/feature-refactor
 ```
 
@@ -113,23 +166,14 @@ Original `session_manager.py` zustava pro kompatibilitu.
 
 ---
 
-## Dalsi kroky (FAZE 3+):
+## Dalsi kroky (FAZE 4+):
 
-### 1. Opravit Python verzi a otestovat aplikaci
+### 1. Otestovat refaktorovany kod s aplikaci
 ```bash
-py -3.12 -m venv .venv312
-.venv312\Scripts\activate
-pip install -r requirements.txt
-python main.py  # Mel by fungovat!
+python main.py  # Otestovat ze vse funguje
 ```
 
-### 2. FAZE 3: Audio Processing Layer
-- Rozdelit `audio_analyzer.py`, `amplitude_analyzer.py`
-- Vytvorit `CrepeAnalyzer`, `RmsAnalyzer`
-- Factory pattern pro analyzery
-- Unit testy s mock audio
-
-### 3. FAZE 4: GUI Refactoring
+### 2. FAZE 4: GUI Refactoring
 - Oddelit presentery od views
 - MainWindow pouze jako view (~150 radku)
 - EventBus propojeni (uz existuje!)
@@ -182,14 +226,16 @@ python main.py  # Mel by fungovat!
 
 ### Pred refaktoringem:
 - `session_manager.py`: 624 radku
-- Monoliticka trida
+- `audio_analyzer.py`, `amplitude_analyzer.py`, `pitch_detector.py`: 864 radku
+- Monoliticke tridy
 - Tezko testovatelne
 - Tezko rozsiritelne
 
 ### Po refaktoringu:
-- 3 moduly: 150 + 140 + 90 = 380 radku
+- Session: 3 moduly (150 + 140 + 90 = 380 radku)
+- Audio: 4 moduly (106 + 105 + 142 + 145 = 498 radku)
 - Jasne zodpovednosti
-- Unit testy: 4 passing
+- Unit testy: 22 passing
 - Pripraveno pro DI
 
 ### Code Quality:
