@@ -427,14 +427,39 @@ class MainWindow(QMainWindow):
 
         self.session_manager.save_folders(input_folder=input_folder)
 
+        # Reset samples list pro nové načítání
+        self.samples = []
+        self.sample_list.update_samples([])
+
         self.analyzer = SessionAwareBatchAnalyzer(input_folder, self.session_manager)
         self.analyzer.progress_updated.connect(self.status_panel.update_progress)
+        self.analyzer.sample_analyzed.connect(self._on_sample_analyzed)  # NOVÝ signál!
         self.analyzer.analysis_completed.connect(self._on_analysis_completed)
         self.analyzer.start()
 
+    def _on_sample_analyzed(self, sample: SampleMetadata, range_info: dict):
+        """
+        NOVÝ HANDLER: Průběžně přidává analyzované samples do seznamu.
+
+        Args:
+            sample: Nově analyzovaný nebo načtený sample
+            range_info: Aktuální informace o amplitude rozsahu
+        """
+        # Přidej sample do seznamu
+        self.samples.append(sample)
+
+        # Průběžně aktualizuj UI (každých 10 samples nebo při posledním)
+        if len(self.samples) % 10 == 0 or len(self.samples) == 1:
+            self.sample_list.update_samples(self.samples)
+            logger.debug(f"UI updated with {len(self.samples)} samples")
+
     def _on_analysis_completed(self, samples: List[SampleMetadata], range_info: dict):
         """Handler pro dokončení analýzy."""
-        self.samples = [s for s in samples if s is not None]
+        # Samples už jsou přidány průběžně v _on_sample_analyzed
+        # Jen se ujistíme že máme finální seznam (pro případ že něco chybělo)
+        if not self.samples:
+            self.samples = [s for s in samples if s is not None]
+
         self.status_panel.hide_progress()
 
         if not self.samples:
@@ -474,12 +499,13 @@ class MainWindow(QMainWindow):
         else:
             logger.warning("No samples to cache - all samples missing hash or failed validation")
 
-        # Update UI
+        # Finální update UI (samples už byly průběžně přidávány)
         self.sample_list.update_samples(self.samples)
         self.mapping_matrix.clear_matrix()
 
         # Show cache statistics
         self.status_panel.update_cache_info(cached_count, len(newly_analyzed))
+        logger.info(f"UI finalized with {len(self.samples)} total samples")
 
         # Restore mapping
         restored_mapping = self.session_manager.restore_mapping(self.samples)

@@ -90,6 +90,9 @@ class SessionAwareBatchAnalyzer(QThread):
     progress_updated = Signal(int, str)  # percentage, message
     analysis_completed = Signal(list, dict)  # samples, range_info
 
+    # NOVÝ signál pro průběžné přidávání samples
+    sample_analyzed = Signal(object, dict)  # sample, current_range_info
+
     def __init__(self, input_folder: Path, session_manager):
         """
         Args:
@@ -155,17 +158,23 @@ class SessionAwareBatchAnalyzer(QThread):
 
             logger.info(f"Cache analysis: {len(self.cached_samples)} cached, {len(self.samples_to_analyze)} to analyze")
 
-            if not self.samples_to_analyze:
-                # Vše je v cache
-                self.progress_updated.emit(100, f"All samples loaded from cache ({len(self.cached_samples)} samples)")
-
-                # Setup amplitude range manager
-                range_manager = AmplitudeRangeManager()
+            # PRŮBĚŽNĚ: Emituj cached samples okamžitě pro práci s nimi
+            if self.cached_samples:
+                # Setup amplitude range manager pro cached samples
                 for sample in self.cached_samples:
                     if sample.velocity_amplitude and sample.velocity_amplitude > 0:
-                        range_manager.add_sample_amplitude(sample.velocity_amplitude)
+                        self.amplitude_range_manager.add_sample_amplitude(sample.velocity_amplitude)
 
-                range_info = range_manager.get_range_info()
+                    # Emituj každý cached sample individuálně
+                    current_range_info = self.amplitude_range_manager.get_range_info()
+                    self.sample_analyzed.emit(sample, current_range_info)
+
+                logger.info(f"Emitted {len(self.cached_samples)} cached samples for immediate use")
+
+            if not self.samples_to_analyze:
+                # Vše je v cache - už bylo emitováno výše
+                self.progress_updated.emit(100, f"All samples loaded from cache ({len(self.cached_samples)} samples)")
+                range_info = self.amplitude_range_manager.get_range_info()
                 self.analysis_completed.emit(self.cached_samples, range_info)
                 return
 
@@ -205,6 +214,11 @@ class SessionAwareBatchAnalyzer(QThread):
                         # Add to amplitude range manager
                         if sample.velocity_amplitude is not None and sample.velocity_amplitude > 0:
                             self.amplitude_range_manager.add_sample_amplitude(sample.velocity_amplitude)
+
+                        # PRŮBĚŽNĚ: Emituj každý nově analyzovaný sample okamžitě
+                        current_range_info = self.amplitude_range_manager.get_range_info()
+                        self.sample_analyzed.emit(sample, current_range_info)
+                        logger.debug(f"Emitted newly analyzed sample: {sample.filename}")
                     else:
                         logger.warning(f"Failed to analyze {sample.filename}")
 
