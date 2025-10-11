@@ -128,7 +128,7 @@ class AudioPlayer(QGroupBox):
         self.play_current_sample()
 
     def play_midi_tone(self, midi_note: int):
-        """Přehraje MIDI tón pomocí sounddevice."""
+        """Přehraje MIDI tón pomocí sounddevice s asynchronním zpracováním."""
         if not AUDIO_AVAILABLE:
             logger.warning("Cannot play MIDI tone - audio not available")
             return
@@ -137,10 +137,24 @@ class AudioPlayer(QGroupBox):
             logger.warning(f"MIDI nota {midi_note} není v piano rozsahu")
             return
 
-        # Zastaví současné přehrávání
-        self.stop_playback()
+        # OPRAVA: Zastaví současné přehrávání a počká na uvolnění streamu
+        if self.is_playing or self.is_comparing:
+            self.stop_playback()
+            # Delší pauza pro bezpečné uvolnění audio streamu
+            QTimer.singleShot(100, lambda: self._delayed_play_midi_tone(midi_note))
+            return
 
+        self._delayed_play_midi_tone(midi_note)
+
+    def _delayed_play_midi_tone(self, midi_note: int):
+        """Zpožděné přehrání MIDI tónu pro bezpečné uvolnění audio streamu."""
         try:
+            # OPRAVA: Explicitně zajisti že předchozí stream je uzavřen
+            try:
+                sd.stop()
+            except:
+                pass
+
             # Generuj čistý sinusový tón
             sample_rate = 44100
             duration = 2.0  # 2 sekundy
@@ -158,8 +172,8 @@ class AudioPlayer(QGroupBox):
             # Snížit hlasitost
             tone *= 0.4
 
-            # Přehraj
-            sd.play(tone, sample_rate)
+            # OPRAVA: Přehraj s blocking=False pro asynchronní přehrávání
+            sd.play(tone, sample_rate, blocking=False)
             self.is_playing = True
             self.stop_button.setEnabled(True)
 
@@ -173,8 +187,10 @@ class AudioPlayer(QGroupBox):
             logger.info(f"Přehrán MIDI tón: {note_name} (MIDI {midi_note}, {frequency:.1f} Hz)")
 
         except Exception as e:
-            logger.error(f"Chyba při přehrávání MIDI tónu {midi_note}: {e}")
+            logger.error(f"Chyba při přehrávání MIDI tónu {midi_note}: {e}", exc_info=True)
             self.status_label.setText(f"Chyba MIDI tónu: {e}")
+            self.is_playing = False
+            self.stop_button.setEnabled(False)
 
     def play_transposed_tone(self, midi_note: int):
         """Přehraje transponovaný MIDI tón."""
