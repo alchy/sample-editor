@@ -1,5 +1,5 @@
 """
-audio_player.py - Konsolidovaná finální verze audio playeru
+audio_player.py - Audio player s dedikovaným worker threadem pro MIDI tóny
 """
 
 import logging
@@ -10,26 +10,27 @@ from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QPushButton, QLabel
 
 from models import SampleMetadata
 from midi_utils import MidiUtils
+from audio_worker import get_audio_worker, AUDIO_AVAILABLE
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Import audio knihoven podle funkční verze
+# Import audio knihoven pro sample playback
 try:
     import sounddevice as sd
     import soundfile as sf
-
-    AUDIO_AVAILABLE = True
-    logger.info("Audio knihovny načteny úspěšně (sounddevice + soundfile)")
+    SAMPLE_PLAYBACK_AVAILABLE = True
 except ImportError as e:
-    AUDIO_AVAILABLE = False
-    logger.warning(f"Audio knihovny nejsou k dispozici: {e}")
+    SAMPLE_PLAYBACK_AVAILABLE = False
+    logger.warning(f"Sample playback not available: {e}")
 
 
 class AudioPlayer(QGroupBox):
     """
-    Audio přehrávač pro samples s podporou klávesových zkratek - KONSOLIDOVANÁ VERZE
-    Založeno na funkční implementaci se sounddevice
+    Audio přehrávač s dedikovaným worker threadem pro MIDI tóny.
+
+    - MIDI tóny: přehrávány v separátním threadu (audio_worker)
+    - Samples: přehrávány v main threadu (sounddevice)
     """
 
     playback_started = Signal(str)  # filename
@@ -45,11 +46,14 @@ class AudioPlayer(QGroupBox):
         self.audio_data = None
         self.sample_rate = None
 
-        # Timer pro sledování přehrávání
+        # NOVÉ: Audio worker pro MIDI tóny
+        self.audio_worker = get_audio_worker()
+
+        # Timer pro sledování přehrávání samples
         self.playback_timer = QTimer()
         self.playback_timer.timeout.connect(self._check_playback_status)
 
-        # Timer pro auto-stop (fallback)
+        # Timer pro auto-stop (fallback pro samples)
         self.auto_stop_timer = QTimer()
         self.auto_stop_timer.setSingleShot(True)
         self.auto_stop_timer.timeout.connect(self.force_stop)
@@ -128,69 +132,40 @@ class AudioPlayer(QGroupBox):
         self.play_current_sample()
 
     def play_midi_tone(self, midi_note: int):
-        """Přehraje MIDI tón pomocí sounddevice s asynchronním zpracováním."""
+        """
+        Přehraje MIDI tón v dedikovaném worker threadu.
+
+        NOVÁ IMPLEMENTACE: Používá AudioWorker pro izolované přehrávání.
+        """
         if not AUDIO_AVAILABLE:
             logger.warning("Cannot play MIDI tone - audio not available")
+            self.status_label.setText("Audio není k dispozici")
             return
 
-        if not (21 <= midi_note <= 108):  # Piano rozsah
+        if not (21 <= midi_note <= 108):
             logger.warning(f"MIDI nota {midi_note} není v piano rozsahu")
             return
 
-        # OPRAVA: Zastaví současné přehrávání a počká na uvolnění streamu
-        if self.is_playing or self.is_comparing:
-            self.stop_playback()
-            # Delší pauza pro bezpečné uvolnění audio streamu
-            QTimer.singleShot(100, lambda: self._delayed_play_midi_tone(midi_note))
-            return
+        # Callback pro update UI po dokončení
+        def on_playback_complete(success, **kwargs):
+            if success:
+                midi_note = kwargs.get('midi_note')
+                frequency = kwargs.get('frequency')
+                note_name = MidiUtils.midi_to_note_name(midi_note)
+                self.status_label.setText(f"✓ MIDI tón: {note_name} ({frequency:.1f} Hz)")
+                self.playback_started.emit(f"MIDI {note_name}")
+                logger.debug(f"MIDI tone {midi_note} playback completed")
+            else:
+                error = kwargs.get('error', 'Unknown error')
+                self.status_label.setText(f"Chyba MIDI: {error}")
+                self.playback_error.emit(error)
+                logger.error(f"MIDI tone playback failed: {error}")
 
-        self._delayed_play_midi_tone(midi_note)
-
-    def _delayed_play_midi_tone(self, midi_note: int):
-        """Zpožděné přehrání MIDI tónu pro bezpečné uvolnění audio streamu."""
-        try:
-            # OPRAVA: Explicitně zajisti že předchozí stream je uzavřen
-            try:
-                sd.stop()
-            except:
-                pass
-
-            # Generuj čistý sinusový tón
-            sample_rate = 44100
-            duration = 2.0  # 2 sekundy
-            frequency = 440.0 * (2 ** ((midi_note - 69) / 12))
-
-            t = np.linspace(0, duration, int(sample_rate * duration))
-            tone = np.sin(2 * np.pi * frequency * t)
-
-            # Envelope pro plynulý začátek a konec
-            fade_samples = int(sample_rate * 0.05)  # 50ms fade
-            if len(tone) > 2 * fade_samples:
-                tone[:fade_samples] *= np.linspace(0, 1, fade_samples)
-                tone[-fade_samples:] *= np.linspace(1, 0, fade_samples)
-
-            # Snížit hlasitost
-            tone *= 0.4
-
-            # OPRAVA: Přehraj s blocking=False pro asynchronní přehrávání
-            sd.play(tone, sample_rate, blocking=False)
-            self.is_playing = True
-            self.stop_button.setEnabled(True)
-
-            # Auto-stop timer
-            self.auto_stop_timer.start(int(duration * 1000) + 100)
-
-            note_name = MidiUtils.midi_to_note_name(midi_note)
-            self.status_label.setText(f"♪ Přehrává MIDI tón: {note_name} ({frequency:.1f} Hz)")
-            self.playback_started.emit(f"MIDI {note_name}")
-
-            logger.info(f"Přehrán MIDI tón: {note_name} (MIDI {midi_note}, {frequency:.1f} Hz)")
-
-        except Exception as e:
-            logger.error(f"Chyba při přehrávání MIDI tónu {midi_note}: {e}", exc_info=True)
-            self.status_label.setText(f"Chyba MIDI tónu: {e}")
-            self.is_playing = False
-            self.stop_button.setEnabled(False)
+        # Pošli do audio worker threadu
+        note_name = MidiUtils.midi_to_note_name(midi_note)
+        self.status_label.setText(f"♪ Přehrává MIDI tón: {note_name}...")
+        self.audio_worker.play_midi_tone(midi_note, callback=on_playback_complete)
+        logger.debug(f"MIDI tone {midi_note} queued for playback in worker thread")
 
     def play_transposed_tone(self, midi_note: int):
         """Přehraje transponovaný MIDI tón."""
@@ -274,10 +249,18 @@ class AudioPlayer(QGroupBox):
 
     def cleanup(self):
         """Cleanup method for proper shutdown."""
+        # Stop sample playback
         self.stop_playback()
-        if hasattr(sd, 'stop'):
+        if SAMPLE_PLAYBACK_AVAILABLE and hasattr(sd, 'stop'):
             try:
                 sd.stop()
             except:
                 pass
+
+        # NOVÉ: Stop audio worker (MIDI tones)
+        # Worker je singleton, bude stopnut při zavření aplikace
+        # Zde jen stopneme aktuální přehrávání
+        if self.audio_worker:
+            self.audio_worker.stop_playback()
+
         logger.info("Audio player cleanup completed")

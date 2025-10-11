@@ -56,7 +56,15 @@ def main():
         # Zobraz tip při spuštění (volitelné)
         show_startup_info(window)
 
-        sys.exit(app.exec())
+        exit_code = app.exec()
+
+        # NOVÉ: Shutdown audio worker před ukončením
+        logger.info("Shutting down audio worker...")
+        from audio_worker import shutdown_audio_worker
+        shutdown_audio_worker()
+        logger.info("✓ Audio worker shutdown complete")
+
+        sys.exit(exit_code)
 
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
