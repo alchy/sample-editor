@@ -5,7 +5,7 @@ drag_drop_matrix_core.py - Jádro mapovací matice s drag&drop podporou
 from typing import Dict, Tuple, Optional
 from PySide6.QtWidgets import QPushButton, QMessageBox
 from PySide6.QtCore import Qt, Signal, QMimeData, QTimer
-from PySide6.QtGui import QDrag, QPainter, QColor, QPixmap, QMouseEvent
+from PySide6.QtGui import QDrag, QPainter, QColor, QPixmap, QMouseEvent, QKeyEvent
 
 from models import SampleMetadata
 from midi_utils import MidiUtils
@@ -31,10 +31,13 @@ class DragDropMatrixCell(QPushButton):
 
         self.setAcceptDrops(True)
         self.setFixedSize(120, 30)
-        self.setToolTip(f"MIDI {midi_note}, Velocity {velocity}\nLevý klik: přehrát/odstranit")
+        self.setToolTip(f"MIDI {midi_note}, Velocity {velocity}\nLevý klik: přehrát | Pravý klik/Delete: odstranit")
 
         # Přidáno pro handling kliků
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+
+        # Povolení focus pro klávesové události
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self._update_style()
 
@@ -52,15 +55,38 @@ class DragDropMatrixCell(QPushButton):
         elif event.button() == Qt.MouseButton.RightButton:
             if self.sample:
                 # Pravý klik - odstranit sample bez notifikace
-                removed_sample = self.sample
-                self.sample.mapped = False
-                self.sample = None
-                self._update_style()
-                self.sample_removed.emit(removed_sample, self.midi_note, self.velocity)
-                logger.info(f"Removed {removed_sample.filename} from MIDI {self.midi_note}, V{self.velocity} (right-click)")
+                self._remove_sample()
             event.accept()
         else:
             super().mousePressEvent(event)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        """
+        Obsluha klávesových událostí - Delete/Backspace odstraní sample z buňky.
+
+        Args:
+            event: Klávesová událost
+        """
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            if self.sample:
+                self._remove_sample()
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            super().keyPressEvent(event)
+
+    def _remove_sample(self):
+        """Odstraní sample z buňky."""
+        if not self.sample:
+            return
+
+        removed_sample = self.sample
+        self.sample.mapped = False
+        self.sample = None
+        self._update_style()
+        self.sample_removed.emit(removed_sample, self.midi_note, self.velocity)
+        logger.info(f"Removed {removed_sample.filename} from MIDI {self.midi_note}, V{self.velocity}")
 
     def _update_style(self):
         """Aktualizuje styl buňky."""
