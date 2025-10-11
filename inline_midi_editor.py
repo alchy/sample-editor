@@ -110,28 +110,11 @@ class SampleListItem(QWidget):
 
         layout.addLayout(midi_info_layout)
 
-        # Transpozice tlačítka
-        self._create_compact_transpose_buttons(layout)
+        # Transpozice tlačítka v rounded boxu
+        self._create_compact_transpose_buttons_group(layout)
 
-        # Play button
-        play_btn = QPushButton("♪")
-        play_btn.setMaximumWidth(25)
-        play_btn.setToolTip("Přehrát sample")
-        play_btn.clicked.connect(self._play_sample)
-        play_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                font-weight: bold;
-                border-radius: 4px;
-                border: none;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-        """)
-        layout.addWidget(play_btn)
+        # Play button v rounded boxu
+        self._create_play_button_group(layout)
 
         layout.addStretch()
 
@@ -303,10 +286,22 @@ class SampleListItem(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to create drag pixmap: {e}")
-    def _create_compact_transpose_buttons(self, layout):
-        """Vytvoří kompaktní transpozice tlačítka."""
+    def _create_compact_transpose_buttons_group(self, layout):
+        """Vytvoří transpozice tlačítka v rounded boxu (konzistentní s RMS/MIDI stylem)."""
+        # Container frame pro rounded box
+        transpose_frame = QFrame()
+        transpose_frame.setStyleSheet("""
+            QFrame {
+                background-color: #fff9e6;
+                border-radius: 4px;
+                border: 1px solid #ffa726;
+                padding: 2px 4px;
+            }
+        """)
+
         transpose_layout = QHBoxLayout()
-        transpose_layout.setSpacing(2)
+        transpose_layout.setContentsMargins(3, 2, 3, 2)
+        transpose_layout.setSpacing(3)
 
         # -12, -1, +1, +12
         buttons_config = [
@@ -318,8 +313,8 @@ class SampleListItem(QWidget):
 
         for text, semitones, color, tooltip in buttons_config:
             btn = QPushButton(text)
-            btn.setMaximumWidth(25)
-            btn.setMaximumHeight(25)
+            btn.setMaximumWidth(28)
+            btn.setMaximumHeight(24)
             btn.clicked.connect(lambda checked, s=semitones: self._transpose(s))
             btn.setToolTip(tooltip)
             btn.setStyleSheet(f"""
@@ -337,7 +332,49 @@ class SampleListItem(QWidget):
             """)
             transpose_layout.addWidget(btn)
 
-        layout.addLayout(transpose_layout)
+        transpose_frame.setLayout(transpose_layout)
+        layout.addWidget(transpose_frame)
+
+    def _create_play_button_group(self, layout):
+        """Vytvoří play button v rounded boxu s větší šířkou a ikonou noty."""
+        # Container frame pro rounded box
+        play_frame = QFrame()
+        play_frame.setStyleSheet("""
+            QFrame {
+                background-color: #e8f5e9;
+                border-radius: 4px;
+                border: 1px solid #66bb6a;
+                padding: 2px 4px;
+            }
+        """)
+
+        play_layout = QHBoxLayout()
+        play_layout.setContentsMargins(3, 2, 3, 2)
+        play_layout.setSpacing(0)
+
+        # Play button s větší šířkou
+        play_btn = QPushButton("♪")
+        play_btn.setMinimumWidth(45)  # Větší šířka
+        play_btn.setMaximumHeight(24)
+        play_btn.setToolTip("Přehrát sample")
+        play_btn.clicked.connect(self._play_sample)
+        play_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                font-weight: bold;
+                border-radius: 3px;
+                border: none;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        play_layout.addWidget(play_btn)
+
+        play_frame.setLayout(play_layout)
+        layout.addWidget(play_frame)
 
     def _update_display(self):
         """Aktualizuje zobrazení informací."""
