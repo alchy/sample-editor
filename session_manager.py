@@ -50,12 +50,13 @@ class SessionManager:
 
         return sorted(session_names)
 
-    def create_new_session(self, session_name: str) -> bool:
+    def create_new_session(self, session_name: str, velocity_layers: int = 4) -> bool:
         """
         Vytvoří novou session.
 
         Args:
             session_name: Název nové session
+            velocity_layers: Počet velocity layers (default 4)
 
         Returns:
             True pokud se podařilo vytvořit, False pokud už existuje
@@ -70,6 +71,7 @@ class SessionManager:
             "session_name": session_name,
             "created": datetime.now().isoformat(),
             "last_modified": datetime.now().isoformat(),
+            "velocity_layers": velocity_layers,  # NOVÉ: Počet velocity layers
             "folders": {
                 "input": None,
                 "output": None
@@ -85,7 +87,7 @@ class SessionManager:
         self.current_session = session_name
         self._save_session()
 
-        logger.info(f"Created new session: {session_name}")
+        logger.info(f"Created new session: {session_name} with {velocity_layers} velocity layers")
         return True
 
     def load_session(self, session_name: str) -> bool:
@@ -538,9 +540,17 @@ class SessionManager:
             "name": self.session_data.get("session_name"),
             "created": self.session_data.get("created"),
             "last_modified": self.session_data.get("last_modified"),
+            "velocity_layers": self.session_data.get("velocity_layers", 4),  # Default 4
             "cached_samples": len(self.session_data.get("samples_cache", {})),
             "mapping_entries": len(self.session_data.get("mapping", {}))
         }
+
+    def get_velocity_layers(self) -> int:
+        """Vrátí počet velocity layers pro aktuální session."""
+        if not self.session_data:
+            return 4  # Default
+
+        return self.session_data.get("velocity_layers", 4)
 
     def get_cache_stats(self) -> Dict:
         """NOVÁ METODA: Vrátí statistiky cache."""

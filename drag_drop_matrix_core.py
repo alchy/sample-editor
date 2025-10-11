@@ -30,7 +30,7 @@ class DragDropMatrixCell(QPushButton):
         self.sample: Optional[SampleMetadata] = None
 
         self.setAcceptDrops(True)
-        self.setFixedSize(120, 30)
+        self.setFixedSize(60, 15)  # Zmenšeno na polovinu (původně 120x30)
         self.setToolTip(f"MIDI {midi_note}, Velocity {velocity}\nLevý klik: přehrát | Pravý klik/Delete: odstranit")
 
         # Přidáno pro handling kliků
@@ -91,13 +91,15 @@ class DragDropMatrixCell(QPushButton):
     def _update_style(self):
         """Aktualizuje styl buňky."""
         if self.sample:
-            self.setText(self.sample.filename[:15] + "..." if len(self.sample.filename) > 15 else self.sample.filename)
+            # Zkrácený text pro menší buňky - max 7 znaků
+            self.setText(self.sample.filename[:7] + "..." if len(self.sample.filename) > 7 else self.sample.filename)
             self.setStyleSheet("""
                 QPushButton {
-                    background-color: #90ee90; 
+                    background-color: #90ee90;
                     border: 1px solid #ccc;
                     text-align: left;
-                    padding: 2px;
+                    padding: 1px;
+                    font-size: 8px;
                 }
                 QPushButton:hover {
                     background-color: #7dd87d;
@@ -107,8 +109,9 @@ class DragDropMatrixCell(QPushButton):
             self.setText("")
             self.setStyleSheet("""
                 QPushButton {
-                    background-color: white; 
+                    background-color: white;
                     border: 1px solid #ccc;
+                    font-size: 8px;
                 }
                 QPushButton:hover {
                     background-color: #f0f0f0;

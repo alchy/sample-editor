@@ -4,9 +4,10 @@ session_dialog.py - Startup dialog pro session management
 
 from typing import Optional
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-                               QListWidget, QLineEdit, QGroupBox, QMessageBox, QFrame)
+                               QListWidget, QLineEdit, QGroupBox, QMessageBox, QFrame, QSpinBox)
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
+from PySide6.QtWidgets import QListWidgetItem
 
 from session_manager import SessionManager
 import logging
@@ -188,6 +189,37 @@ class SessionDialog(QDialog):
         """)
         right_layout.addWidget(self.session_name_input)
 
+        # Velocity Layers input
+        velocity_label = QLabel("Počet velocity layers:")
+        velocity_label.setStyleSheet("color: #2c3e50; margin-top: 10px; margin-bottom: 5px;")
+        right_layout.addWidget(velocity_label)
+
+        velocity_layout = QHBoxLayout()
+        self.velocity_layers_spinbox = QSpinBox()
+        self.velocity_layers_spinbox.setRange(1, 8)  # Min 1, max 8 layers
+        self.velocity_layers_spinbox.setValue(4)  # Default 4 layers
+        self.velocity_layers_spinbox.setToolTip("Počet velocity vrstev v mapovací matici (1-8)")
+        self.velocity_layers_spinbox.setStyleSheet("""
+            QSpinBox {
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+                min-width: 60px;
+            }
+            QSpinBox:focus {
+                border-color: #27ae60;
+            }
+        """)
+        velocity_layout.addWidget(self.velocity_layers_spinbox)
+
+        velocity_info = QLabel("(1 = jeden layer, 4 = čtyři layery, 8 = osm layerů)")
+        velocity_info.setStyleSheet("color: #7f8c8d; font-size: 9px;")
+        velocity_layout.addWidget(velocity_info)
+        velocity_layout.addStretch()
+
+        right_layout.addLayout(velocity_layout)
+
         # Validation info
         self.validation_label = QLabel("")
         self.validation_label.setStyleSheet("color: #e74c3c; font-size: 10px; margin-top: 5px;")
@@ -344,11 +376,14 @@ class SessionDialog(QDialog):
             return
 
         try:
-            if self.session_manager.create_new_session(session_name):
+            # Získej počet velocity layers z spinboxu
+            velocity_layers = self.velocity_layers_spinbox.value()
+
+            if self.session_manager.create_new_session(session_name, velocity_layers=velocity_layers):
                 self.selected_session = session_name
                 self.is_new_session = True
                 self.accept()
-                logger.info(f"New session created: {session_name}")
+                logger.info(f"New session created: {session_name} with {velocity_layers} velocity layers")
             else:
                 QMessageBox.critical(self, "Chyba", f"Session '{session_name}' již existuje")
 

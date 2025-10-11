@@ -26,7 +26,7 @@ class DragDropMappingMatrix(QGroupBox):
     sample_moved = Signal(object, int, int, int, int)  # sample, old_midi, old_velocity, new_midi, new_velocity
     sample_selected_in_matrix = Signal(object)  # sample vybraný v matici
 
-    def __init__(self):
+    def __init__(self, velocity_layers: int = 4):
         super().__init__("Mapovací matice: Celý piano rozsah A0-C8 (Levý klik = přehrát/odstranit)")
         self.mapping: Dict[Tuple[int, int], SampleMetadata] = {}
         self.matrix_cells: Dict[Tuple[int, int], DragDropMatrixCell] = {}
@@ -34,6 +34,9 @@ class DragDropMappingMatrix(QGroupBox):
         # MIDI rozsah piano
         self.piano_min_midi = MidiUtils.PIANO_MIN_MIDI  # 21 (A0)
         self.piano_max_midi = MidiUtils.PIANO_MAX_MIDI  # 108 (C8)
+
+        # Velocity layers (dynamické podle session)
+        self.velocity_layers = velocity_layers
 
         self.init_ui()
 
@@ -95,7 +98,7 @@ class DragDropMappingMatrix(QGroupBox):
         matrix_layout.addWidget(self._create_header_label("Play"), 0, 2)
         matrix_layout.addWidget(self._create_header_label("Reset"), 0, 3)
         matrix_layout.addWidget(self._create_header_label("Assign"), 0, 4)
-        for vel in range(8):
+        for vel in range(self.velocity_layers):
             vel_label = self._create_header_label(f"V{vel}")
             matrix_layout.addWidget(vel_label, 0, vel + 5)
 
@@ -135,8 +138,8 @@ class DragDropMappingMatrix(QGroupBox):
             assign_button = self._create_assign_note_button(midi_note)
             matrix_layout.addWidget(assign_button, row, 4)
 
-            # Velocity buňky
-            for velocity in range(8):
+            # Velocity buňky (dynamický počet podle velocity_layers)
+            for velocity in range(self.velocity_layers):
                 cell = DragDropMatrixCell(midi_note, velocity)
                 # Připoj všechny signály
                 cell.sample_dropped.connect(self._on_sample_dropped)
@@ -226,7 +229,7 @@ class DragDropMappingMatrix(QGroupBox):
     def _reset_note(self, midi_note: int):
         """Odstraní všechny samples pro danou notu."""
         removed_count = 0
-        for velocity in range(8):
+        for velocity in range(self.velocity_layers):
             key = (midi_note, velocity)
             if key in self.matrix_cells and self.matrix_cells[key].sample:
                 self.remove_sample(midi_note, velocity)
@@ -263,9 +266,9 @@ class DragDropMappingMatrix(QGroupBox):
         else:
             range_size = max_rms - min_rms
 
-            for velocity in range(8):
-                part_start = min_rms + (velocity / 8.0) * range_size
-                part_end = min_rms + ((velocity + 1) / 8.0) * range_size
+            for velocity in range(self.velocity_layers):
+                part_start = min_rms + (velocity / float(self.velocity_layers)) * range_size
+                part_end = min_rms + ((velocity + 1) / float(self.velocity_layers)) * range_size
                 part_center = (part_start + part_end) / 2.0
 
                 best_sample = None

@@ -311,7 +311,9 @@ class MainWindow(QMainWindow):
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(2, 2, 2, 2)
 
-        self.mapping_matrix = DragDropMappingMatrix()
+        # Získej velocity_layers ze session
+        velocity_layers = self.session_manager.get_velocity_layers()
+        self.mapping_matrix = DragDropMappingMatrix(velocity_layers=velocity_layers)
         self.mapping_matrix.setMinimumWidth(800)
         right_layout.addWidget(self.mapping_matrix)
 
@@ -320,10 +322,10 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(right_widget)
 
-        # 30/70 rozložení
-        splitter.setSizes([480, 1120])
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 7)
+        # 40/60 rozložení (samples 40%, matice 60%)
+        splitter.setSizes([640, 960])
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 6)
 
         main_layout.addWidget(splitter)
 
