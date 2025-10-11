@@ -34,6 +34,10 @@ class SessionManager:
         # Vytvoř "cache" atribut který deleguje na self
         self.cache = self  # SessionManager sám implementuje cache metody
 
+        # Counter pro průběžné ukládání cache
+        self._cache_writes_since_save = 0
+        self._cache_save_interval = 50  # Ulož každých 50 cache zápisů
+
     def get_available_sessions(self) -> List[str]:
         """Vrátí seznam dostupných session souborů."""
         session_files = list(self.sessions_folder.glob("session-*.json"))
@@ -606,6 +610,8 @@ class SessionManager:
         """
         KOMPATIBILNÍ METODA: Uloží data do cache pod daným hashem.
 
+        Průběžně ukládá session každých N zápisů pro prevenci ztráty dat.
+
         Args:
             file_hash: MD5 hash souboru
             cached_data: Data k uložení
@@ -614,8 +620,20 @@ class SessionManager:
             logger.warning("No session data available for caching")
             return
 
+        # Přidej všechna potřebná metadata pro kompatibilitu s cache_analyzed_samples
+        if 'analyzed_timestamp' not in cached_data:
+            cached_data['analyzed_timestamp'] = datetime.now().isoformat()
+        if 'cache_version' not in cached_data:
+            cached_data['cache_version'] = '2.0'
+
         self.session_data["samples_cache"][file_hash] = cached_data
-        # Auto-save po každém cache zápisu není nutný, uložíme při zavírání
+        self._cache_writes_since_save += 1
+
+        # Průběžné ukládání každých N zápisů
+        if self._cache_writes_since_save >= self._cache_save_interval:
+            logger.info(f"Auto-saving session after {self._cache_writes_since_save} cache writes")
+            self._save_session()
+            self._cache_writes_since_save = 0
 
     def _calculate_file_hash(self, file_path: Path) -> str:
         """VYLEPŠENÁ METODA: Spočítá MD5 hash celého souboru s lepším error handlingem."""
@@ -669,7 +687,11 @@ class SessionManager:
     def close_session(self):
         """Zavře aktuální session."""
         if self.session_data:
+            # Finální uložení všech pending změn
+            if self._cache_writes_since_save > 0:
+                logger.info(f"Final save with {self._cache_writes_since_save} pending cache writes")
             self._save_session()
+            self._cache_writes_since_save = 0
 
         self.current_session = None
         self.session_data = None
