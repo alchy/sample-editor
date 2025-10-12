@@ -290,15 +290,19 @@ class DragDropMappingMatrix(QGroupBox):
                     f"using center-based algorithm (RMS range: {min_rms:.6f} - {max_rms:.6f})")
 
     def _find_samples_for_midi_note(self, midi_note: int) -> List[SampleMetadata]:
-        """Najde všechny samples s danou MIDI notou."""
+        """Najde všechny samples s danou MIDI notou (kromě disabled a filtered)."""
         main_window = self._find_main_window()
         if not main_window or not hasattr(main_window, 'samples'):
             return []
 
         matching_samples = []
         for sample in main_window.samples:
+            # Kontrola disabled flagu (pokud existuje)
+            is_disabled = getattr(sample, 'disabled', False)
+
             if (sample.detected_midi == midi_note and
                     not sample.is_filtered and
+                    not is_disabled and  # OPRAVA: Přidána kontrola disabled
                     sample.velocity_amplitude is not None):
                 matching_samples.append(sample)
 
