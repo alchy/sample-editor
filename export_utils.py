@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 import logging
 
+from config import EXPORT, AUDIO
 from models import SampleMetadata
 from midi_utils import MidiUtils
 
@@ -18,10 +19,7 @@ class ExportManager:
 
     def __init__(self, output_folder: Path):
         self.output_folder = Path(output_folder)
-        self.export_formats = [
-            (44100, 'f44'),
-            (48000, 'f48')
-        ]
+        self.export_formats = EXPORT.Formats.FORMATS
 
     def export_mapped_samples(self, mapping: Dict[Tuple[int, int], SampleMetadata]) -> Dict[str, Union[int, List[str], List[Tuple[str, str]]]]:
         """
@@ -39,11 +37,10 @@ class ExportManager:
             import soundfile as sf
             import librosa
         except ImportError as e:
-            raise ValueError(f"Chybí knihovny pro sample rate konverzi: {e}. "
-                           f"Nainstalujte: pip install soundfile librosa")
+            raise ValueError(EXPORT.Errors.MISSING_LIBRARIES.format(library=str(e)))
 
         if not mapping:
-            raise ValueError("Žádné samples k exportu")
+            raise ValueError(EXPORT.Errors.NO_SAMPLES)
 
         # Validace před exportem
         validation_errors = ExportValidator.validate_mapping(mapping)
@@ -54,7 +51,7 @@ class ExportManager:
         try:
             self.output_folder.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            raise ValueError(f"Nelze vytvořit výstupní složku: {e}")
+            raise ValueError(EXPORT.Errors.FOLDER_CREATE_ERROR.format(error=str(e)))
 
         export_info = {
             'exported_count': 0,
@@ -116,8 +113,8 @@ class ExportManager:
             logger.error(f"MIDI nota {midi_note} není v piano rozsahu")
             return False
 
-        if not (0 <= velocity <= 7):
-            logger.error(f"Velocity {velocity} není v rozsahu 0-7")
+        if not (EXPORT.Validation.MIN_VELOCITY <= velocity <= EXPORT.Validation.MAX_VELOCITY):
+            logger.error(f"Velocity {velocity} není v rozsahu {EXPORT.Validation.MIN_VELOCITY}-{EXPORT.Validation.MAX_VELOCITY}")
             return False
 
         return True
@@ -176,7 +173,7 @@ class ExportManager:
                                     audio_data[:, channel],
                                     orig_sr=original_sr,
                                     target_sr=sample_rate,
-                                    res_type='kaiser_best'  # Vysoká kvalita resample
+                                    res_type=EXPORT.AudioParams.RESAMPLE_QUALITY
                                 )
                                 resampled_channels.append(resampled_channel)
 
@@ -188,11 +185,11 @@ class ExportManager:
                                 audio_data,
                                 orig_sr=original_sr,
                                 target_sr=sample_rate,
-                                res_type='kaiser_best'
+                                res_type=EXPORT.AudioParams.RESAMPLE_QUALITY
                             )
 
                         # Ulož resamplovaný soubor
-                        sf.write(str(output_path), resampled_audio, sample_rate, subtype='PCM_16')
+                        sf.write(str(output_path), resampled_audio, sample_rate, subtype=EXPORT.AudioParams.SUBTYPE_PCM16)
 
                         logger.debug(f"Konvertován {original_sr}Hz -> {sample_rate}Hz: {output_filename}")
 
@@ -296,13 +293,16 @@ class ExportManager:
 
         return preview
 
-    def cleanup_previous_exports(self, pattern: str = "m*-vel*-f*.wav") -> int:
+    def cleanup_previous_exports(self, pattern: str = None) -> int:
         """
         Vyčistí předchozí exporty podle pattern.
 
         Returns:
             Počet smazaných souborů
         """
+        if pattern is None:
+            pattern = EXPORT.FileNaming.CLEANUP_PATTERN
+
         deleted_count = 0
 
         try:
@@ -337,7 +337,7 @@ class ExportValidator:
         errors = []
 
         if not mapping:
-            errors.append("Žádné samples nejsou namapované")
+            errors.append(EXPORT.Errors.NO_MAPPED_SAMPLES)
             return errors
 
         if not isinstance(mapping, dict):
@@ -358,8 +358,8 @@ class ExportValidator:
                     errors.append(f"MIDI nota {midi_note} není v piano rozsahu")
 
                 # Validace velocity
-                if not isinstance(velocity, int) or not (0 <= velocity <= 7):
-                    errors.append(f"Velocity {velocity} není v rozsahu 0-7")
+                if not isinstance(velocity, int) or not (EXPORT.Validation.MIN_VELOCITY <= velocity <= EXPORT.Validation.MAX_VELOCITY):
+                    errors.append(f"Velocity {velocity} není v rozsahu {EXPORT.Validation.MIN_VELOCITY}-{EXPORT.Validation.MAX_VELOCITY}")
 
                 # Validace sample objektu
                 if not isinstance(sample, SampleMetadata):
@@ -397,7 +397,7 @@ class ExportValidator:
             midi_note, velocity = key
 
             try:
-                for sample_rate, sr_suffix in [(44100, 'f44'), (48000, 'f48')]:
+                for sample_rate, sr_suffix in EXPORT.Formats.FORMATS:
                     filename = MidiUtils.generate_filename(midi_note, velocity, sample_rate)
 
                     if filename in filename_map:
