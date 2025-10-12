@@ -10,6 +10,7 @@ from PySide6.QtGui import QFont, QDrag, QPixmap, QPainter, QColor, QMouseEvent
 
 from models import SampleMetadata
 from midi_utils import MidiUtils
+from config import GUI
 import logging
 
 logger = logging.getLogger(__name__)
@@ -160,10 +161,10 @@ class SampleListItem(QWidget):
 
     def _create_drag_button(self) -> QPushButton:
         """Vytvoří dedikované drag tlačítko."""
-        drag_btn = QPushButton("⋮⋮")  # Vertical dots jako drag handle
-        drag_btn.setMaximumWidth(30)
-        drag_btn.setMaximumHeight(30)
-        drag_btn.setToolTip("Přetáhnout do matice (Drag & Drop)")
+        drag_btn = QPushButton(GUI.Texts.ICON_DRAG)  # Text z configu
+        drag_btn.setMaximumWidth(GUI.Dimensions.BTN_DRAG_WIDTH)  # Šířka z configu
+        drag_btn.setMaximumHeight(GUI.Dimensions.BTN_DRAG_HEIGHT)  # Výška z configu
+        drag_btn.setToolTip(GUI.Texts.TOOLTIP_DRAG_TO_MATRIX)
 
         drag_btn.setStyleSheet("""
             QPushButton {

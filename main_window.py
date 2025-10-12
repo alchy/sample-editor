@@ -146,7 +146,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sampler Editor - Professional Version")
-        self.resize(1600, 900)
+        # Maximalizuj okno při startu a drž ho maximalizované
+        self.showMaximized()
 
         self.samples = []
         self.export_manager = None
