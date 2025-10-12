@@ -18,6 +18,7 @@ from export_thread import ExportThread
 from session_manager import SessionManager
 from session_dialog import SessionDialog
 from session_aware_analyzer import SessionAwareBatchAnalyzer
+from midi_utils import MidiUtils
 
 # Import UI komponent
 from drag_drop_sample_list import DragDropSampleList
@@ -488,7 +489,7 @@ class MainWindow(QMainWindow):
         )
 
     def _auto_assign_with_progress(self) -> dict:
-        """Provede auto-assign s progress barem."""
+        """Provede auto-assign s progress barem - postupuje od nejvyšší noty k nejnižší."""
         from PySide6.QtCore import QCoreApplication
 
         stats = {
@@ -497,23 +498,26 @@ class MainWindow(QMainWindow):
             'total_samples': 0
         }
 
-        piano_min = self.mapping_matrix.piano_min_midi
-        piano_max = self.mapping_matrix.piano_max_midi
+        piano_min = self.mapping_matrix.piano_min_midi  # 21 (A0)
+        piano_max = self.mapping_matrix.piano_max_midi  # 108 (C8)
         total_notes = piano_max - piano_min + 1
 
-        # Projdi všechny MIDI noty
-        for idx, midi_note in enumerate(range(piano_min, piano_max + 1)):
+        # Vytvoř seznam not od nejvyšší k nejnižší (C8 -> A0)
+        midi_notes = list(range(piano_min, piano_max + 1))
+        midi_notes.reverse()  # Obrátit pořadí: 108, 107, 106, ..., 22, 21
+
+        # Projdi všechny MIDI noty od nejvyšší k nejnižší
+        for idx, midi_note in enumerate(midi_notes):
             stats['total_notes'] += 1
 
-            # Update progress (každých 5 not, aby to nebylo moc pomalé)
-            if idx % 5 == 0 or idx == total_notes - 1:
-                progress = int((idx / total_notes) * 100)
-                note_name = MidiUtils.midi_to_note_name(midi_note)
-                self.status_panel.update_progress(
-                    progress,
-                    f"Auto-assigning: {note_name} (MIDI {midi_note}) - {idx+1}/{total_notes} notes"
-                )
-                QCoreApplication.processEvents()  # Force UI update
+            # Update progress po KAŽDÉ notě pro plynulý vizuální feedback
+            progress = int(((idx + 1) / total_notes) * 100)
+            note_name = MidiUtils.midi_to_note_name(midi_note)
+            self.status_panel.update_progress(
+                progress,
+                f"Auto-assigning: {note_name} (MIDI {midi_note}) - {idx+1}/{total_notes} notes"
+            )
+            QCoreApplication.processEvents()  # Force UI update
 
             # Spočítej kolik samples bylo před assign
             before_count = sum(1 for key in self.mapping_matrix.mapping.keys() if key[0] == midi_note)
