@@ -233,8 +233,23 @@ class SampleListItem(QWidget):
 
         return True
 
+    def _find_parent_sample_list(self):
+        """Najde parent DragDropSampleList widget."""
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, '_rebuild_list_with_samples'):
+                return parent
+            parent = parent.parent()
+        return None
+
     def _start_drag_operation(self):
         """Spustí drag operaci pro tento sample."""
+        # BEZPEČNOST: Kontrola zda není UI vytváření v průběhu
+        parent_list = self._find_parent_sample_list()
+        if parent_list and hasattr(parent_list, 'ui_creation_in_progress') and parent_list.ui_creation_in_progress:
+            logger.warning(f"Cannot drag {self.sample.filename} - UI creation in progress")
+            return
+
         try:
             mime_data = QMimeData()
             mime_data.setData("application/x-sample-metadata", str(id(self.sample)).encode())

@@ -150,6 +150,7 @@ class DragDropSampleList(QGroupBox):
         self.samples: List[SampleMetadata] = []
         self.sample_items: List[SampleListItem] = []
         self.current_selected_sample: Optional[SampleMetadata] = None
+        self.ui_creation_in_progress = False  # Flag pro bezpečnost při drag operacích
         self.init_ui()
 
     def init_ui(self):
@@ -214,6 +215,9 @@ class DragDropSampleList(QGroupBox):
         total_samples = len(samples)
         self.info_label.setText(f"Vytváření UI pro {total_samples} samples...")
 
+        # BEZPEČNOST: Nastav flag že vytváření probíhá
+        self.ui_creation_in_progress = True
+
         self._items_to_create = samples.copy()
         self._creation_timer = QTimer()
         self._creation_timer.timeout.connect(self._create_next_item)
@@ -223,6 +227,8 @@ class DragDropSampleList(QGroupBox):
         """Vytvoří další item v sekvenci."""
         if not self._items_to_create:
             self._creation_timer.stop()
+            # BEZPEČNOST: Vypni flag když je hotovo
+            self.ui_creation_in_progress = False
             self._finalize_samples_loading()
             return
 
