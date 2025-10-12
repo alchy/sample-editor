@@ -236,6 +236,43 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self._refresh_samples)
         view_menu.addAction(refresh_action)
 
+        view_menu.addSeparator()
+
+        # Sort by MIDI and RMS
+        sort_action = QAction("Sort by &MIDI and RMS", self)
+        sort_action.setShortcut(QKeySequence("T"))
+        sort_action.setStatusTip("Sort samples by MIDI note and RMS amplitude")
+        sort_action.triggered.connect(self._sort_samples)
+        view_menu.addAction(sort_action)
+
+        # Playback Menu
+        playback_menu = menubar.addMenu("&Playback")
+
+        # Play Current Sample
+        self.play_sample_action = QAction("&Play Current Sample", self)
+        self.play_sample_action.setShortcut(QKeySequence("Space"))
+        self.play_sample_action.setStatusTip("Play the currently selected sample")
+        self.play_sample_action.triggered.connect(self._play_current_sample)
+        self.play_sample_action.setEnabled(False)
+        playback_menu.addAction(self.play_sample_action)
+
+        # Play Reference MIDI Tone
+        self.play_midi_tone_action = QAction("Play Reference &MIDI Tone", self)
+        self.play_midi_tone_action.setShortcut(QKeySequence("M"))
+        self.play_midi_tone_action.setStatusTip("Play reference MIDI tone for comparison")
+        self.play_midi_tone_action.triggered.connect(self._play_current_midi_tone)
+        self.play_midi_tone_action.setEnabled(False)
+        playback_menu.addAction(self.play_midi_tone_action)
+
+        playback_menu.addSeparator()
+
+        # Stop Playback
+        stop_action = QAction("&Stop Playback", self)
+        stop_action.setShortcut(QKeySequence("Esc"))
+        stop_action.setStatusTip("Stop audio playback")
+        stop_action.triggered.connect(self._stop_playback)
+        playback_menu.addAction(stop_action)
+
         # Help Menu
         help_menu = menubar.addMenu("&Help")
 
@@ -412,6 +449,33 @@ class MainWindow(QMainWindow):
                           "• Drag & drop interface\n"
                           "• Multi-format export\n\n"
                           "Built with PySide6 and Python")
+
+    def _sort_samples(self):
+        """Sortuje samples podle MIDI noty a RMS."""
+        # Triggeruje sortování v sample listu přes klávesovou zkratku T
+        # Vytvoříme simulovanou key event
+        from PySide6.QtGui import QKeyEvent
+        from PySide6.QtCore import QEvent
+
+        key_event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_T, Qt.KeyboardModifier.NoModifier)
+        if hasattr(self.sample_list, 'sample_list'):
+            self.sample_list.sample_list.keyPressEvent(key_event)
+
+    def _play_current_sample(self):
+        """Přehraje aktuálně vybraný sample."""
+        if hasattr(self.sample_list, 'current_selected_sample') and self.sample_list.current_selected_sample:
+            self.safe_play_sample(self.sample_list.current_selected_sample)
+
+    def _play_current_midi_tone(self):
+        """Přehraje referenční MIDI tón aktuálně vybraného sample."""
+        if hasattr(self.sample_list, 'current_selected_sample') and self.sample_list.current_selected_sample:
+            sample = self.sample_list.current_selected_sample
+            if sample.detected_midi:
+                self.safe_play_midi_note(sample.detected_midi)
+
+    def _stop_playback(self):
+        """Zastaví přehrávání."""
+        self.audio_player.stop_playback()
 
     # Core functionality methods
     def safe_play_sample(self, sample: SampleMetadata):
@@ -618,6 +682,13 @@ class MainWindow(QMainWindow):
     def _on_sample_selected(self, sample: SampleMetadata):
         """Handler pro výběr sample."""
         self.mapping_matrix.highlight_sample_in_matrix(sample)
+
+        # Aktivuj playback menu actions pokud je sample vybraný
+        has_sample = sample is not None
+        has_midi = sample is not None and sample.detected_midi is not None
+
+        self.play_sample_action.setEnabled(has_sample)
+        self.play_midi_tone_action.setEnabled(has_midi)
 
     def _on_sample_mapped(self, sample: SampleMetadata, midi_note: int, velocity: int):
         """Handler pro mapování sample."""
