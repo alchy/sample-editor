@@ -224,6 +224,26 @@ class SessionDialog(QDialog):
 
         # === INSTRUMENT METADATA (pro export JSON) ===
 
+        # Instrument Name
+        instrument_name_label = QLabel("Instrument Name:")
+        instrument_name_label.setStyleSheet("color: #2c3e50; margin-top: 10px; margin-bottom: 5px; font-weight: bold;")
+        right_layout.addWidget(instrument_name_label)
+
+        self.instrument_name_input = QLineEdit()
+        self.instrument_name_input.setPlaceholderText("např. Steinway Grand Piano (volitelné - default: session name)")
+        self.instrument_name_input.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #27ae60;
+            }
+        """)
+        right_layout.addWidget(self.instrument_name_input)
+
         # Author
         author_label = QLabel("Author:")
         author_label.setStyleSheet("color: #2c3e50; margin-top: 10px; margin-bottom: 5px;")
@@ -443,12 +463,13 @@ class SessionDialog(QDialog):
         try:
             # Získej všechna metadata
             velocity_layers = self.velocity_layers_spinbox.value()
+
+            # Instrument name - pokud není zadán, použij session name
+            instrument_name = self.instrument_name_input.text().strip() or session_name
+
             author = self.author_input.text().strip() or "N/A"
             category = self.category_input.text().strip() or "N/A"
             description = self.description_input.toPlainText().strip() or "N/A"
-
-            # Instrument name default = session name
-            instrument_name = session_name
 
             # Metadata dictionary pro JSON export
             metadata = {
@@ -464,7 +485,8 @@ class SessionDialog(QDialog):
                 self.selected_session = session_name
                 self.is_new_session = True
                 self.accept()
-                logger.info(f"New session created: {session_name} with {velocity_layers} velocity layers and metadata")
+                logger.info(f"New session created: {session_name} with {velocity_layers} velocity layers")
+                logger.info(f"Instrument metadata - Name: {instrument_name}, Author: {author}, Category: {category}")
             else:
                 QMessageBox.critical(self, "Chyba", f"Session '{session_name}' již existuje")
 
