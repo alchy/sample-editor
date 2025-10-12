@@ -321,6 +321,47 @@ class DragDropMappingMatrix(QGroupBox):
             old_sample.mapped = False
         self.add_sample(sample, midi_note, velocity)
 
+    def auto_assign_all_notes(self) -> Dict[str, int]:
+        """
+        Provede auto-assign pro všechny MIDI noty (celý piano rozsah).
+
+        Returns:
+            Dictionary se statistikami:
+            - total_notes: Celkový počet zpracovaných not
+            - assigned_notes: Počet not s přiřazenými samples
+            - total_samples: Celkový počet přiřazených samples
+        """
+        stats = {
+            'total_notes': 0,
+            'assigned_notes': 0,
+            'total_samples': 0
+        }
+
+        logger.info(f"Starting auto-assign for all notes (MIDI {self.piano_min_midi}-{self.piano_max_midi})...")
+
+        # Projdi všechny MIDI noty v piano rozsahu
+        for midi_note in range(self.piano_min_midi, self.piano_max_midi + 1):
+            stats['total_notes'] += 1
+
+            # Spočítej kolik samples bylo před assign
+            before_count = sum(1 for key in self.mapping.keys() if key[0] == midi_note)
+
+            # Proveď auto-assign pro tuto notu
+            self._auto_assign_note(midi_note)
+
+            # Spočítej kolik samples je po assign
+            after_count = sum(1 for key in self.mapping.keys() if key[0] == midi_note)
+
+            # Pokud se něco přiřadilo, započítej
+            if after_count > before_count:
+                stats['assigned_notes'] += 1
+                stats['total_samples'] += (after_count - before_count)
+
+        logger.info(f"Auto-assign all completed: {stats['assigned_notes']}/{stats['total_notes']} notes assigned, "
+                   f"{stats['total_samples']} total samples")
+
+        return stats
+
     def clear_matrix(self):
         """Vyčistí celou mapovací matici."""
         for key in list(self.mapping.keys()):

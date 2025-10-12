@@ -219,6 +219,15 @@ class MainWindow(QMainWindow):
         # Edit Menu
         edit_menu = menubar.addMenu("&Edit")
 
+        # Assign All
+        assign_all_action = QAction("&Assign All Samples", self)
+        assign_all_action.setShortcut(QKeySequence("Ctrl+Shift+A"))
+        assign_all_action.setStatusTip("Auto-assign all samples to all MIDI notes using RMS-based algorithm")
+        assign_all_action.triggered.connect(self._assign_all_samples)
+        edit_menu.addAction(assign_all_action)
+
+        edit_menu.addSeparator()
+
         # Clear Matrix
         clear_matrix_action = QAction("&Clear Matrix", self)
         clear_matrix_action.setShortcut(QKeySequence("Ctrl+K"))
@@ -419,6 +428,108 @@ class MainWindow(QMainWindow):
             self.output_folder = Path(folder)
             self.set_output_folder(self.output_folder)
             self.statusBar().showMessage(f"Output folder: {self.output_folder.name}")
+
+    def _assign_all_samples(self):
+        """Automaticky přiřadí všechny samples na všechny MIDI noty."""
+        if not self.samples:
+            QMessageBox.information(self, "Assign All", "No samples loaded. Please load samples first.")
+            return
+
+        # Zjisti kolik je unmapped samples
+        unmapped_count = sum(1 for s in self.samples if not s.mapped and s.detected_midi is not None)
+        if unmapped_count == 0:
+            QMessageBox.information(self, "Assign All", "No unmapped samples available for assignment.")
+            return
+
+        # Potvrzení od uživatele
+        reply = QMessageBox.question(
+            self,
+            "Assign All Samples",
+            f"Auto-assign all samples to all MIDI notes?\n\n"
+            f"This will assign {unmapped_count} unmapped samples across the entire piano range (A0-C8)\n"
+            f"using the RMS-based velocity distribution algorithm.\n\n"
+            f"Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Zobraz progress
+        self.status_panel.show_progress()
+        self.status_panel.update_progress(0, "Starting auto-assign for all notes...")
+
+        # Force process events pro zobrazení progress baru
+        from PySide6.QtCore import QCoreApplication
+        QCoreApplication.processEvents()
+
+        # Proveď auto-assign s progress updatem
+        stats = self._auto_assign_with_progress()
+
+        # Skryj progress a zobraz výsledky
+        self.status_panel.hide_progress()
+
+        # Refresh display
+        self.sample_list.refresh_display()
+        self._save_session_state()
+
+        # Zobraz výsledky
+        QMessageBox.information(
+            self,
+            "Assign All Completed",
+            f"Auto-assign completed!\n\n"
+            f"Processed notes: {stats['total_notes']}\n"
+            f"Notes with assignments: {stats['assigned_notes']}\n"
+            f"Total samples assigned: {stats['total_samples']}"
+        )
+
+        self.statusBar().showMessage(
+            f"Assign All: {stats['total_samples']} samples assigned to {stats['assigned_notes']} notes"
+        )
+
+    def _auto_assign_with_progress(self) -> dict:
+        """Provede auto-assign s progress barem."""
+        from PySide6.QtCore import QCoreApplication
+
+        stats = {
+            'total_notes': 0,
+            'assigned_notes': 0,
+            'total_samples': 0
+        }
+
+        piano_min = self.mapping_matrix.piano_min_midi
+        piano_max = self.mapping_matrix.piano_max_midi
+        total_notes = piano_max - piano_min + 1
+
+        # Projdi všechny MIDI noty
+        for idx, midi_note in enumerate(range(piano_min, piano_max + 1)):
+            stats['total_notes'] += 1
+
+            # Update progress (každých 5 not, aby to nebylo moc pomalé)
+            if idx % 5 == 0 or idx == total_notes - 1:
+                progress = int((idx / total_notes) * 100)
+                note_name = MidiUtils.midi_to_note_name(midi_note)
+                self.status_panel.update_progress(
+                    progress,
+                    f"Auto-assigning: {note_name} (MIDI {midi_note}) - {idx+1}/{total_notes} notes"
+                )
+                QCoreApplication.processEvents()  # Force UI update
+
+            # Spočítej kolik samples bylo před assign
+            before_count = sum(1 for key in self.mapping_matrix.mapping.keys() if key[0] == midi_note)
+
+            # Proveď auto-assign pro tuto notu
+            self.mapping_matrix._auto_assign_note(midi_note)
+
+            # Spočítej kolik samples je po assign
+            after_count = sum(1 for key in self.mapping_matrix.mapping.keys() if key[0] == midi_note)
+
+            # Pokud se něco přiřadilo, započítej
+            if after_count > before_count:
+                stats['assigned_notes'] += 1
+                stats['total_samples'] += (after_count - before_count)
+
+        return stats
 
     def _clear_matrix(self):
         """Vyčistí mapovací matici."""
