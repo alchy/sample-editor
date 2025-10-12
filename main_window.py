@@ -422,6 +422,14 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Error playing sample {sample.filename}: {e}")
 
+    def safe_play_midi_note(self, midi_note: int):
+        """Bezpečné přehrání referenčního MIDI tónu."""
+        try:
+            self.audio_player.stop_playback()
+            QTimer.singleShot(50, lambda: self.audio_player.play_midi_tone(midi_note))
+        except Exception as e:
+            logger.error(f"Error playing MIDI note {midi_note}: {e}")
+
     def load_samples(self, input_folder: Path):
         """Načte samples se session cachingem."""
         self.status_panel.show_progress()

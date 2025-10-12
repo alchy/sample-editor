@@ -23,6 +23,7 @@ class SampleListItem(QWidget):
 
     sample_selected = Signal(object)  # sample
     sample_play_requested = Signal(object)  # sample
+    midi_note_play_requested = Signal(int)  # midi_note - pro přehrání referenčního tónu
     midi_changed = Signal(object, int, int)  # sample, old_midi, new_midi
     sample_disabled_changed = Signal(object, bool)  # sample, disabled
     drag_requested = Signal(object)  # sample
@@ -361,30 +362,30 @@ class SampleListItem(QWidget):
         layout.addWidget(transpose_frame)
 
     def _create_play_button_group(self, layout):
-        """Vytvoří play button v rounded boxu s větší šířkou a ikonou noty."""
+        """Vytvoří play buttons v rounded boxu - zelený pro sample, růžový pro referenční MIDI tón."""
         # Container frame pro rounded box - FIXED WIDTH pro zarovnání
         play_frame = QFrame()
-        play_frame.setFixedWidth(60)  # Fixed width pro column alignment
+        play_frame.setFixedWidth(85)  # Rozšířeno pro dvě tlačítka
         play_frame.setStyleSheet("""
             QFrame {
-                background-color: #e8f5e9;
+                background-color: #f3e5f5;
                 border-radius: 4px;
-                border: 1px solid #66bb6a;
+                border: 1px solid #ab47bc;
                 padding: 2px 4px;
             }
         """)
 
         play_layout = QHBoxLayout()
         play_layout.setContentsMargins(3, 2, 3, 2)
-        play_layout.setSpacing(0)
+        play_layout.setSpacing(3)
 
-        # Play button s fixed šířkou
-        play_btn = QPushButton("♪")
-        play_btn.setFixedWidth(48)  # Fixed width pro column alignment
-        play_btn.setMaximumHeight(24)
-        play_btn.setToolTip("Přehrát sample")
-        play_btn.clicked.connect(self._play_sample)
-        play_btn.setStyleSheet("""
+        # Play sample button (zelený) s fixed šířkou
+        play_sample_btn = QPushButton("♪")
+        play_sample_btn.setFixedWidth(36)  # Zmenšeno pro dvě tlačítka
+        play_sample_btn.setMaximumHeight(24)
+        play_sample_btn.setToolTip("Přehrát audio sample")
+        play_sample_btn.clicked.connect(self._play_sample)
+        play_sample_btn.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
                 color: white;
@@ -397,7 +398,28 @@ class SampleListItem(QWidget):
                 background-color: #45a049;
             }
         """)
-        play_layout.addWidget(play_btn)
+        play_layout.addWidget(play_sample_btn)
+
+        # Play MIDI tone button (růžový)
+        play_midi_btn = QPushButton("♫")
+        play_midi_btn.setFixedWidth(36)
+        play_midi_btn.setMaximumHeight(24)
+        play_midi_btn.setToolTip("Přehrát referenční MIDI tón (pro porovnání)")
+        play_midi_btn.clicked.connect(self._play_midi_tone)
+        play_midi_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ec407a;
+                color: white;
+                font-weight: bold;
+                border-radius: 3px;
+                border: none;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #d81b60;
+            }
+        """)
+        play_layout.addWidget(play_midi_btn)
 
         play_frame.setLayout(play_layout)
         layout.addWidget(play_frame)
@@ -516,6 +538,12 @@ class SampleListItem(QWidget):
         """Přehraje sample."""
         if self.sample and not self.sample.disabled:
             self.sample_play_requested.emit(self.sample)
+
+    def _play_midi_tone(self):
+        """Přehraje referenční MIDI tón pro porovnání."""
+        if self.sample and self.sample.detected_midi:
+            self.midi_note_play_requested.emit(self.sample.detected_midi)
+            logger.debug(f"Playing reference MIDI tone: {self.sample.detected_midi}")
 
     def _show_file_info(self, position):
         """Zobrazí dialog s informacemi o souboru při pravém kliknutí."""

@@ -251,6 +251,7 @@ class DragDropSampleList(QGroupBox):
         # KLÍČOVÉ PROPOJENÍ: Připoj MIDI změny na parent signál
         sample_item_widget.sample_selected.connect(self._on_sample_selected)
         sample_item_widget.sample_play_requested.connect(self._emit_play_request)
+        sample_item_widget.midi_note_play_requested.connect(self._emit_midi_note_play_request)  # NOVÉ: referenční tón
         sample_item_widget.midi_changed.connect(self._on_midi_changed)  # NOVÉ!
         sample_item_widget.sample_disabled_changed.connect(self._on_sample_disabled_changed)
         sample_item_widget.drag_requested.connect(self._on_drag_started)  # Signál zahájení drag operace
@@ -339,6 +340,15 @@ class DragDropSampleList(QGroupBox):
         while parent:
             if hasattr(parent, 'safe_play_sample'):
                 parent.safe_play_sample(sample)
+                return
+            parent = parent.parent()
+
+    def _emit_midi_note_play_request(self, midi_note: int):
+        """Emit MIDI note play request through parent hierarchy."""
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'safe_play_midi_note'):
+                parent.safe_play_midi_note(midi_note)
                 return
             parent = parent.parent()
 
