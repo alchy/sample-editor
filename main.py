@@ -1,5 +1,5 @@
 """
-main.py - Sampler Editor - vstupní bod aplikace s graceful shutdown
+main.py - Sample Mapping Editor - vstupní bod aplikace s graceful shutdown
 """
 
 import sys
@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import QTimer
 
 from main_window import MainWindow
+from config import APP
 
 # Nastavení loggingu
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -78,8 +79,8 @@ def show_startup_info(window):
         from audio_player import AUDIO_AVAILABLE
         audio_status = "✓ Audio available" if AUDIO_AVAILABLE else "⚠ Audio not available"
 
-        QMessageBox.information(window, "Sampler Editor - Professional Version",
-                                f"Sampler Editor - Professional Version\n\n"
+        QMessageBox.information(window, APP.Info.FULL_NAME,
+                                f"{APP.Info.FULL_NAME}\n\n"
                                 f"Status: {audio_status}\n\n"
                                 "KEY FEATURES:\n"
                                 "• Professional menu bar interface\n"
@@ -98,7 +99,7 @@ def show_startup_info(window):
                                 "WORKFLOW:\n"
                                 "1. Create/select session\n"
                                 "2. Set input folder → analysis\n"
-                                "3. Map samples using drag buttons (⋮⋮)\n"
+                                "3. Map samples using drag buttons (⋮Drag&Drop⋮)\n"
                                 "4. Set output folder & export")
     except Exception as e:
         logger.error(f"Error showing startup info: {e}")

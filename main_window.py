@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Sampler Editor - Professional Version")
+        self.setWindowTitle(GUI.Texts.WINDOW_TITLE)
         # Maximalizuj okno při startu a drž ho maximalizované
         self.showMaximized()
 
@@ -289,7 +289,7 @@ class MainWindow(QMainWindow):
 
         # About
         about_action = QAction("&About", self)
-        about_action.setStatusTip("About Sampler Editor")
+        about_action.setStatusTip(GUI.Texts.TIP_ABOUT)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
 
@@ -556,15 +556,7 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         """Zobrazí About dialog."""
-        QMessageBox.about(self, "About Sampler Editor",
-                          "Sampler Editor v2.0\n\n"
-                          "Professional sample mapping tool with:\n"
-                          "• CREPE pitch detection\n"
-                          "• RMS velocity analysis\n"
-                          "• Hash-based session caching\n"
-                          "• Drag & drop interface\n"
-                          "• Multi-format export\n\n"
-                          "Built with PySide6 and Python")
+        QMessageBox.about(self, GUI.Texts.ABOUT_TITLE, GUI.Texts.ABOUT_TEXT)
 
     def _sort_samples(self):
         """Sortuje samples podle MIDI noty a RMS."""

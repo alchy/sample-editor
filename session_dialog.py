@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QListWidgetItem
 
-from config import AUDIO
+from config import AUDIO, GUI
 from session_manager import SessionManager
 import logging
 
@@ -25,7 +25,7 @@ class SessionDialog(QDialog):
         self.selected_session = None
         self.is_new_session = False
 
-        self.setWindowTitle("Sampler Editor - Session Management")
+        self.setWindowTitle(GUI.Texts.SESSION_DIALOG_TITLE)
         self.setModal(True)
         self.resize(600, 450)
 
@@ -37,13 +37,13 @@ class SessionDialog(QDialog):
         layout = QVBoxLayout()
 
         # Header
-        header_label = QLabel("Vítejte v Sampler Editoru")
+        header_label = QLabel(GUI.Texts.SESSION_HEADER)
         header_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_label.setStyleSheet("color: #2c3e50; margin: 10px;")
         layout.addWidget(header_label)
 
-        subtitle_label = QLabel("Vyberte existující session nebo vytvořte novou")
+        subtitle_label = QLabel(GUI.Texts.SESSION_SUBTITLE)
         subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle_label.setStyleSheet("color: #7f8c8d; margin-bottom: 20px;")
         layout.addWidget(subtitle_label)

@@ -11,9 +11,9 @@ from pathlib import Path
 class AppInfo:
     """Informace o aplikaci."""
 
-    NAME = "Sampler Editor"
+    NAME = "Sample Mapping Editor"
     VERSION = "2.0"
-    FULL_NAME = "Sampler Editor - Professional Version"
+    FULL_NAME = "Sample Mapping Editor - Professional Version"
 
     # Credits
     DESCRIPTION = """Professional sample mapping tool with:
@@ -132,7 +132,7 @@ class LoggingConfig:
     FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 
     # Log file (pokud je potřeba)
-    LOG_FILE = "sampler_editor.log"
+    LOG_FILE = "sample_mapping_editor.log"
 
 
 # =============================================================================

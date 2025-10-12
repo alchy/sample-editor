@@ -1,5 +1,5 @@
 """
-config - Centrální konfigurace pro Sampler Editor
+config - Centrální konfigurace pro Sample Mapping Editor
 
 Použití:
     from config import GUI, AUDIO, EXPORT, APP

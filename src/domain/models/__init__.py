@@ -1,5 +1,5 @@
 """
-Domain models pro Sample Editor.
+Domain models pro Sample Mapping Editor.
 """
 
 from .sample import SampleMetadata, AnalysisProgress

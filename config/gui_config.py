@@ -79,8 +79,8 @@ class Dimensions:
     AUDIO_PLAYER_HEIGHT = 150
 
     # Sample list
-    SAMPLE_LIST_MIN_WIDTH = 300
-    SAMPLE_LIST_MAX_WIDTH = 600
+    SAMPLE_LIST_MIN_WIDTH = 250
+    SAMPLE_LIST_MAX_WIDTH = 650
 
     # Mapping matrix
     MATRIX_MIN_WIDTH = 800
@@ -97,7 +97,7 @@ class Dimensions:
     ITEM_HEIGHT_COMPACT = 25
 
     # Buttony
-    BTN_DRAG_WIDTH = 30
+    BTN_DRAG_WIDTH = 120
     BTN_DRAG_HEIGHT = 30
     BTN_PLAY_WIDTH = 36
     BTN_PLAY_HEIGHT = 24
@@ -194,7 +194,7 @@ class Texts:
     """Všechny UI textové řetězce."""
 
     # Hlavní okno
-    WINDOW_TITLE = "Sampler Editor - Professional Version"
+    WINDOW_TITLE = "Sample Mapping Editor for Ithaca Player"
     WINDOW_READY = "Ready"
 
     # Menu
@@ -238,7 +238,7 @@ class Texts:
     TIP_PLAY_SAMPLE = "Play the currently selected sample"
     TIP_PLAY_MIDI_TONE = "Play reference MIDI tone for comparison"
     TIP_STOP = "Stop audio playback"
-    TIP_ABOUT = "About Sampler Editor"
+    TIP_ABOUT = "About Sample Mapping Editor"
 
     # Control panel
     CONTROL_PANEL_TITLE = "Session & Export"
@@ -266,14 +266,14 @@ class Texts:
     BTN_STOP = "Stop (ESC)"
 
     # Mapping matrix
-    MATRIX_TITLE_TEMPLATE = "Mapovací matice: Celý piano rozsah A0-C8 (Levý klik = přehrát/odstranit)"
+    MATRIX_TITLE_TEMPLATE = "Sample mapping matrix (LMB = play / RMB = remove)"
     MATRIX_INFO_LINE1 = "💡 Tip: Přetáhněte sample z levého seznamu pomocí ikonky ⋮⋮"
     MATRIX_INFO_LINE2 = "nebo použijte tlačítko ⚡ pro automatické přiřazení"
     MATRIX_MAPPED_TEMPLATE = "Namapováno: {count} samples"
 
     # Session dialog
-    SESSION_DIALOG_TITLE = "Sampler Editor - Session Management"
-    SESSION_HEADER = "Vítejte v Sampler Editoru"
+    SESSION_DIALOG_TITLE = "Sample Mapping Editor - Session Management"
+    SESSION_HEADER = "Vítejte v Sample Mapping Editoru"
     SESSION_SUBTITLE = "Vyberte existující session nebo vytvořte novou"
     SESSION_RECENT_TITLE = "Nedávné Sessions"
     SESSION_NEW_TITLE = "Nová Session"
@@ -313,15 +313,15 @@ class Texts:
     # Use dynamic formatting: f"...({AUDIO.Velocity.MIN_LAYERS}-{AUDIO.Velocity.MAX_LAYERS})"
 
     # Ikony a symboly
-    ICON_DRAG = "⋮⋮"
+    ICON_DRAG = "⋮Drag&Drop⋮"
     ICON_PLAY_SAMPLE = "♪"
     ICON_PLAY_MIDI = "♫"
     ICON_RESET = "⌫"
     ICON_ASSIGN = "⚡"
 
     # About dialog
-    ABOUT_TITLE = "About Sampler Editor"
-    ABOUT_TEXT = """Sampler Editor v2.0
+    ABOUT_TITLE = "About Sample Mapping Editor"
+    ABOUT_TEXT = """Sample Mapping Editor v2.0
 
 Professional sample mapping tool with:
 • CREPE pitch detection

@@ -1,5 +1,5 @@
 """
-Domain interfaces pro Sample Editor.
+Domain interfaces pro Sample Mapping Editor.
 """
 
 from .session_repository import ISessionRepository
