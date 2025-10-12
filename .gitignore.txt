@@ -1,4 +1,0 @@
-.git
-.venv
-.venv313
-__pycache__
