@@ -31,7 +31,7 @@ class DragDropMatrixCell(QPushButton):
 
         self.setAcceptDrops(True)
         self.setFixedSize(60, 15)  # Zmenšeno na polovinu (původně 120x30)
-        self.setToolTip(f"MIDI {midi_note}, Velocity {velocity}\nLevý klik: přehrát | Pravý klik/Delete: odstranit")
+        self._update_tooltip()
 
         # Přidáno pro handling kliků
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -88,18 +88,38 @@ class DragDropMatrixCell(QPushButton):
         self.sample_removed.emit(removed_sample, self.midi_note, self.velocity)
         logger.info(f"Removed {removed_sample.filename} from MIDI {self.midi_note}, V{self.velocity}")
 
+    def _update_tooltip(self):
+        """Aktualizuje tooltip s informacemi o sample."""
+        if self.sample:
+            tooltip = f"Sample: {self.sample.filename}\n"
+            tooltip += f"MIDI: {self.midi_note}, Velocity: {self.velocity}\n"
+            if self.sample.velocity_amplitude is not None:
+                tooltip += f"RMS: {self.sample.velocity_amplitude:.6f}\n"
+            tooltip += "Levý klik: přehrát | Pravý klik/Delete: odstranit"
+        else:
+            tooltip = f"MIDI {self.midi_note}, Velocity {self.velocity}\n"
+            tooltip += "Levý klik: přehrát | Pravý klik/Delete: odstranit"
+
+        self.setToolTip(tooltip)
+
     def _update_style(self):
         """Aktualizuje styl buňky."""
         if self.sample:
-            # Zkrácený text pro menší buňky - max 7 znaků
-            self.setText(self.sample.filename[:7] + "..." if len(self.sample.filename) > 7 else self.sample.filename)
+            # Zobraz RMS hodnotu místo filename
+            if self.sample.velocity_amplitude is not None:
+                rms_text = f"{self.sample.velocity_amplitude:.4f}"
+            else:
+                rms_text = "N/A"
+
+            self.setText(rms_text)
             self.setStyleSheet("""
                 QPushButton {
                     background-color: #90ee90;
                     border: 1px solid #ccc;
-                    text-align: left;
+                    text-align: center;
                     padding: 1px;
                     font-size: 8px;
+                    font-weight: bold;
                 }
                 QPushButton:hover {
                     background-color: #7dd87d;
@@ -117,6 +137,9 @@ class DragDropMatrixCell(QPushButton):
                     background-color: #f0f0f0;
                 }
             """)
+
+        # Aktualizuj tooltip
+        self._update_tooltip()
 
     def dragEnterEvent(self, event):
         """Obsluha vstupu drag operace - přijímá pouze z drag tlačítek."""
