@@ -353,12 +353,18 @@ class DragDropSampleList(QGroupBox):
             parent = parent.parent()
 
     def _emit_compare_request(self, sample: SampleMetadata):
-        """Emit compare request."""
+        """Emit compare request - přehraje jen sample."""
         self._emit_play_request(sample)
 
     def _emit_simultaneous_request(self, sample: SampleMetadata):
-        """Emit simultaneous request."""
+        """Emit simultaneous request - přehraje sample + MIDI tón současně (dual play)."""
+        # Přehraj sample audio
         self._emit_play_request(sample)
+
+        # Pokud má sample MIDI detekci, přehraj i MIDI tón
+        if sample and sample.detected_midi:
+            self._emit_midi_note_play_request(sample.detected_midi)
+            logger.debug(f"Dual play: sample {sample.filename} + MIDI tone {sample.detected_midi}")
 
     def refresh_display(self):
         """Obnoví zobrazení."""
