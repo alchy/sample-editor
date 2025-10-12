@@ -487,7 +487,6 @@ sample-editor/
 
 ---
 
-**Vytvořil**: Claude Code Refactoring Agent
 **Datum**: 2025-10-11
 **Verze**: 1.0
 **Status**: FÁZE 4.5 NUTNÁ PŘED TESTOVÁNÍM

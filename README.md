@@ -1,3 +1,105 @@
+# Sample Editor (PySide6 GUI)
+
+Professional sample mapping and export tool for musicians and sound designers. This repository contains a desktop GUI application built with Python and PySide6 (Qt for Python). It analyzes audio samples (pitch via CREPE, amplitude/RMS), lets you map them across the keyboard with velocity layers, and exports organized WAV files.
+
+This README adds technical details for setup, running, tests, and project structure. The detailed feature documentation from the previous README is kept below for convenience.
+
+## Overview
+- Language: Python 3.x
+- Frameworks/Libraries: PySide6 (Qt), sounddevice, soundfile, librosa, TensorFlow + CREPE (for pitch detection)
+- Package manager: pip (requirements.txt / requirements-dev.txt)
+- Entry point: main.py (launches the GUI)
+
+## Requirements
+- Python: 3.9–3.12 recommended
+- OS: Windows, macOS, or Linux with system audio configured
+- Runtime deps: see requirements.txt
+- Dev/test deps (optional): see requirements-dev.txt
+
+Install dependencies:
+- Windows (PowerShell)
+  - python -m venv .venv
+  - .venv\\Scripts\\Activate
+  - pip install --upgrade pip
+  - pip install -r requirements.txt
+- macOS/Linux (bash)
+  - python3 -m venv .venv
+  - source .venv/bin/activate
+  - python -m pip install --upgrade pip
+  - pip install -r requirements.txt
+
+Notes:
+- Optional heavy deps (TensorFlow + CREPE) are included in requirements.txt for full pitch-detection functionality.
+- requirements.txt appears to contain a corrupted trailing line. If installation fails near the end, open the file and remove the last non-ASCII line. TODO: Clean the file and pin only necessary versions.
+
+## Setup and Run
+- Activate your virtual environment
+- Install dependencies (see above)
+- Launch the application:
+  - Windows: python .\\main.py
+  - macOS/Linux: python3 ./main.py
+
+The GUI will open. On first run with CREPE/TensorFlow, model load can take tens of seconds.
+
+## Scripts and Common Commands
+There is no pyproject.toml or setup.py with defined scripts. Use these direct commands instead:
+- Run app: python main.py
+- Run tests: pytest
+- Run tests with markers:
+  - unit only: pytest -m unit
+  - integration only: pytest -m integration
+  - include slow tests: pytest -m "unit or integration or slow"
+- Verbose, short tracebacks (default via pytest.ini): pytest -v --tb=short
+- Lint/format (if you installed requirements-dev.txt):
+  - flake8
+  - black .
+  - mypy .
+
+## Environment Variables
+No required environment variables are defined by the project at this time. Potential optional variables you might consider for your environment:
+- TODO AUDIODEVICE or SOUNDDEVICE-related configuration to force a specific audio device
+- TODO QT_QPA_PLATFORM to change Qt backend in headless/CI runs (e.g., "offscreen")
+- TODO TensorFlow settings (e.g., to disable GPU if needed: CUDA_VISIBLE_DEVICES="")
+
+If you intend to run GUI tests in CI, you may need a virtual display (Xvfb on Linux) or to set Qt to offscreen.
+
+## Tests
+- Framework: pytest (configured via pytest.ini)
+- Test locations: tests/
+- Markers (see pytest.ini): unit, integration, slow
+- GUI testing helpers: pytest-qt is present in runtime requirements
+
+Examples:
+- Run all: pytest
+- Run unit tests only: pytest -m unit
+- Show durations of slow tests: pytest -m slow -vv
+
+## Project Structure
+High-level layout of this repository:
+- main.py — GUI entry point (sets up QApplication, MainWindow, graceful shutdown, audio worker shutdown)
+- main_window.py — Main window and menu/shortcut wiring
+- sample_editor_widget.py — Central editor UI widgets
+- audio_analyzer.py, pitch_detector.py, session_aware_analyzer*.py — Analysis logic (CREPE/RMS, caching)
+- audio_player.py, audio_worker.py — Playback and background audio worker
+- drag_drop_* — Drag & drop helpers and mapping matrix components
+- export_thread.py, export_utils.py — Asynchronous export and helpers
+- sessions/ — Session files (JSON) persisted by the app
+- tests/ — Unit and integration tests (pytest)
+- requirements.txt — Runtime dependencies (note: last line may be corrupted; see TODO above)
+- requirements-dev.txt — Dev/test tooling (pytest, black, flake8, mypy, etc.)
+- pytest.ini — Pytest configuration (paths, markers, options)
+- core/, models.py, midi_utils.py, inline_midi_editor.py, amplitude_*.py — Supporting modules
+- src/ — Present in repo; currently not the primary entrypoint path
+
+For a quick file list, see the sections below or your IDE’s project tree.
+
+## License
+No LICENSE file is present in the repository. Until a license is added, treat this code as “All rights reserved” and do not redistribute. TODO: Add an explicit LICENSE (e.g., MIT/Apache-2.0) and update this section.
+
+---
+
+Below is the original, detailed feature guide retained for users.
+
 # Sampler Editor - Professional Version
 
 Professional sample mapping tool with advanced pitch detection, velocity analysis, and intelligent session management.
@@ -352,7 +454,6 @@ Professional sample editor for music production workflows.
 
 **Version:** 2.0
 **Framework:** PySide6
-**Built with:** Claude Code
 
 ---
 
