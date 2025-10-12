@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QListWidgetItem
 
+from config import AUDIO
 from session_manager import SessionManager
 import logging
 
@@ -196,9 +197,9 @@ class SessionDialog(QDialog):
 
         velocity_layout = QHBoxLayout()
         self.velocity_layers_spinbox = QSpinBox()
-        self.velocity_layers_spinbox.setRange(1, 8)  # Min 1, max 8 layers
-        self.velocity_layers_spinbox.setValue(4)  # Default 4 layers
-        self.velocity_layers_spinbox.setToolTip("Počet velocity vrstev v mapovací matici (1-8)")
+        self.velocity_layers_spinbox.setRange(AUDIO.Velocity.MIN_LAYERS, AUDIO.Velocity.MAX_LAYERS)
+        self.velocity_layers_spinbox.setValue(AUDIO.Velocity.DEFAULT_LAYERS)
+        self.velocity_layers_spinbox.setToolTip(f"Počet velocity vrstev v mapovací matici ({AUDIO.Velocity.MIN_LAYERS}-{AUDIO.Velocity.MAX_LAYERS})")
         self.velocity_layers_spinbox.setStyleSheet("""
             QSpinBox {
                 border: 2px solid #bdc3c7;
@@ -213,7 +214,7 @@ class SessionDialog(QDialog):
         """)
         velocity_layout.addWidget(self.velocity_layers_spinbox)
 
-        velocity_info = QLabel("(1 = jeden layer, 4 = čtyři layery, 8 = osm layerů)")
+        velocity_info = QLabel(f"({AUDIO.Velocity.MIN_LAYERS} = jeden layer, {AUDIO.Velocity.DEFAULT_LAYERS} = výchozí, {AUDIO.Velocity.MAX_LAYERS} = maximum)")
         velocity_info.setStyleSheet("color: #7f8c8d; font-size: 9px;")
         velocity_layout.addWidget(velocity_info)
         velocity_layout.addStretch()
