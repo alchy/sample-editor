@@ -309,7 +309,8 @@ class Texts:
     TOOLTIP_PLAY_MAPPED = "Přehrát namapovaný sample: {filename}"
     TOOLTIP_RESET_CELL = "Odstranit sample z této pozice"
     TOOLTIP_ASSIGN_AUTO = "Automaticky přiřadit sample na tuto pozici"
-    TOOLTIP_VELOCITY_LAYERS = "Počet velocity vrstev v mapovací matici (1-8)"
+    # Note: Velocity layers range is defined in AUDIO.Velocity (1-8 by default)
+    # Use dynamic formatting: f"...({AUDIO.Velocity.MIN_LAYERS}-{AUDIO.Velocity.MAX_LAYERS})"
 
     # Ikony a symboly
     ICON_DRAG = "⋮⋮"
