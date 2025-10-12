@@ -13,6 +13,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Optional
 import numpy as np
+from config import AUDIO
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class AudioWorker:
     """
 
     def __init__(self):
-        self.task_queue = queue.Queue(maxsize=10)
+        self.task_queue = queue.Queue(maxsize=AUDIO.Timing.QUEUE_MAX_SIZE)
         self.worker_thread = None
         self.running = False
         self.is_playing = False
@@ -121,13 +122,13 @@ class AudioWorker:
 
         # Pošli shutdown command
         try:
-            self.task_queue.put(AudioTask(AudioCommand.SHUTDOWN, {}), timeout=1.0)
+            self.task_queue.put(AudioTask(AudioCommand.SHUTDOWN, {}), timeout=AUDIO.Timing.THREAD_SHUTDOWN_TIMEOUT)
         except queue.Full:
             pass
 
         # Počkej na dokončení threadu
         if self.worker_thread and self.worker_thread.is_alive():
-            self.worker_thread.join(timeout=2.0)
+            self.worker_thread.join(timeout=AUDIO.Timing.THREAD_JOIN_TIMEOUT)
 
         logger.info("✓ AudioWorker stopped")
 
@@ -153,7 +154,7 @@ class AudioWorker:
 
         try:
             # Non-blocking put s timeoutem
-            self.task_queue.put(task, timeout=0.1)
+            self.task_queue.put(task, timeout=AUDIO.Timing.QUEUE_TIMEOUT_SHORT)
             logger.debug(f"MIDI tone {midi_note} queued for playback")
         except queue.Full:
             logger.warning(f"Audio queue full, dropping MIDI tone {midi_note}")
@@ -181,7 +182,7 @@ class AudioWorker:
         )
 
         try:
-            self.task_queue.put(task, timeout=0.1)
+            self.task_queue.put(task, timeout=AUDIO.Timing.QUEUE_TIMEOUT_SHORT)
             logger.debug(f"Sample {filepath} queued for playback")
         except queue.Full:
             logger.warning(f"Audio queue full, dropping sample {filepath}")
@@ -204,7 +205,7 @@ class AudioWorker:
                 except queue.Empty:
                     break
 
-            self.task_queue.put(task, timeout=0.1)
+            self.task_queue.put(task, timeout=AUDIO.Timing.QUEUE_TIMEOUT_SHORT)
             logger.debug("Stop command queued")
         except queue.Full:
             logger.warning("Cannot queue stop command - queue full")
@@ -216,7 +217,7 @@ class AudioWorker:
         while self.running:
             try:
                 # Čekej na task s timeoutem
-                task = self.task_queue.get(timeout=0.5)
+                task = self.task_queue.get(timeout=AUDIO.Timing.QUEUE_TIMEOUT_MEDIUM)
 
                 if task.command == AudioCommand.SHUTDOWN:
                     logger.info("Shutdown command received")
@@ -264,8 +265,8 @@ class AudioWorker:
         callback = task.callback
 
         # Validace
-        if not (21 <= midi_note <= 108):
-            error = f"MIDI note {midi_note} out of range"
+        if not (AUDIO.MIDI.PIANO_MIN_MIDI <= midi_note <= AUDIO.MIDI.PIANO_MAX_MIDI):
+            error = f"MIDI note {midi_note} out of range ({AUDIO.MIDI.PIANO_MIN_MIDI}-{AUDIO.MIDI.PIANO_MAX_MIDI})"
             logger.warning(error)
             if callback:
                 callback(success=False, error=error)
@@ -297,8 +298,8 @@ class AudioWorker:
 
     def _play_midi_via_port(self, midi_note: int, callback=None):
         """Přehraje MIDI notu přes mido port (NEJSPOLEHLIVĚJŠÍ METODA)."""
-        velocity = 80  # Standard velocity
-        duration = 1.0  # 1 sekunda
+        velocity = AUDIO.MIDI.STANDARD_VELOCITY
+        duration = AUDIO.Audio.MIDI_TONE_DURATION
 
         # Send note_on
         msg_on = mido.Message('note_on', note=midi_note, velocity=velocity)
@@ -315,7 +316,7 @@ class AudioWorker:
         self.midi_port.send(msg_off)
         self.is_playing = False
 
-        frequency = 440.0 * (2 ** ((midi_note - 69) / 12))
+        frequency = AUDIO.MIDI.A4_FREQUENCY * (2 ** ((midi_note - AUDIO.MIDI.A4_MIDI) / 12))
         logger.info(f"✓ MIDI note {midi_note} ({frequency:.1f} Hz) played via MIDI port")
 
         if callback:
@@ -326,23 +327,23 @@ class AudioWorker:
         # Zastaví předchozí přehrávání
         if self.is_playing:
             sd.stop()
-            time.sleep(0.05)
+            time.sleep(AUDIO.Timing.WORKER_LOOP_SLEEP)
 
         # Generuj tón
-        sample_rate = 44100
-        duration = 1.0  # Zkráceno z 2.0 na 1.0 pro rychlejší response
-        frequency = 440.0 * (2 ** ((midi_note - 69) / 12))
+        sample_rate = AUDIO.Audio.DEFAULT_SAMPLE_RATE
+        duration = AUDIO.Audio.MIDI_TONE_DURATION
+        frequency = AUDIO.MIDI.A4_FREQUENCY * (2 ** ((midi_note - AUDIO.MIDI.A4_MIDI) / 12))
 
         t = np.linspace(0, duration, int(sample_rate * duration))
         tone = np.sin(2 * np.pi * frequency * t)
 
         # Envelope
-        fade_samples = int(sample_rate * 0.05)
+        fade_samples = int(sample_rate * AUDIO.Audio.FADE_DURATION)
         if len(tone) > 2 * fade_samples:
             tone[:fade_samples] *= np.linspace(0, 1, fade_samples)
             tone[-fade_samples:] *= np.linspace(1, 0, fade_samples)
 
-        tone *= 0.4  # Volume
+        tone *= AUDIO.Audio.VOLUME_MIDI_TONE
 
         # Přehraj (blocking v worker threadu je OK!)
         self.is_playing = True
@@ -363,7 +364,7 @@ class AudioWorker:
             # Zastaví předchozí přehrávání
             if self.is_playing:
                 sd.stop()
-                time.sleep(0.05)
+                time.sleep(AUDIO.Timing.WORKER_LOOP_SLEEP)
 
             # Načti audio
             audio_data, sample_rate = sf.read(str(filepath))
@@ -374,7 +375,7 @@ class AudioWorker:
 
             # Normalizace
             if np.max(np.abs(audio_data)) > 0:
-                audio_data = audio_data / np.max(np.abs(audio_data)) * 0.7
+                audio_data = audio_data / np.max(np.abs(audio_data)) * AUDIO.Audio.VOLUME_SAMPLE
 
             # Přehraj (blocking v worker threadu je OK!)
             self.is_playing = True
