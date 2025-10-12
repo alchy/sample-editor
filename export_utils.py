@@ -3,6 +3,7 @@ export_utils.py - Utility funkce pro export samples se skutečnou sample rate ko
 """
 
 import shutil
+import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 import logging
@@ -321,6 +322,67 @@ class ExportManager:
             logger.error(f"Chyba při čištění starých exportů: {e}")
 
         return deleted_count
+
+    def export_instrument_definition(self, metadata: Dict, mapping: Dict[Tuple[int, int], SampleMetadata]) -> Path:
+        """
+        Vytvoří a exportuje instrument-definition.json soubor.
+
+        Args:
+            metadata: Dictionary s metadaty nástroje (z session manageru)
+            mapping: Dictionary (midi, velocity) -> SampleMetadata pro výpočet sample_count
+
+        Returns:
+            Cesta k vytvořenému JSON souboru
+        """
+        if not metadata:
+            logger.warning("No metadata provided for instrument definition export")
+            metadata = {
+                "instrument_name": "Unknown",
+                "author": "N/A",
+                "category": "N/A",
+                "description": "N/A",
+                "instrument_version": 1
+            }
+
+        # Spočítej počet unikátních MIDI not v mappingu (notes s alespoň jedním samplem)
+        unique_midi_notes = set()
+        for key in mapping.keys():
+            if isinstance(key, tuple) and len(key) == 2:
+                midi_note, velocity = key
+                unique_midi_notes.add(midi_note)
+
+        sample_count = len(unique_midi_notes)
+
+        # Vytvoř JSON strukturu podle specifikace
+        instrument_definition = {
+            "instrumentName": metadata.get("instrument_name", "Unknown"),
+            "velocityMaps": str(metadata.get("velocity_layers", 4)),  # Convert to string as per spec
+            "instrumentVersion": str(metadata.get("instrument_version", 1)),  # Convert to string
+            "author": metadata.get("author", "N/A"),
+            "description": metadata.get("description", "N/A"),
+            "category": metadata.get("category", "N/A"),
+            "sampleCount": sample_count
+        }
+
+        # Ulož JSON do output složky
+        json_path = self.output_folder / "instrument-definition.json"
+
+        try:
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(instrument_definition, f, indent=4, ensure_ascii=False)
+
+            logger.info(f"✓ Instrument definition exported: {json_path}")
+            logger.info(f"  Instrument: {instrument_definition['instrumentName']}")
+            logger.info(f"  Author: {instrument_definition['author']}")
+            logger.info(f"  Category: {instrument_definition['category']}")
+            logger.info(f"  Version: {instrument_definition['instrumentVersion']}")
+            logger.info(f"  Sample Count: {instrument_definition['sampleCount']} MIDI notes")
+
+            return json_path
+
+        except Exception as e:
+            logger.error(f"Failed to export instrument definition: {e}")
+            raise
 
 
 class ExportValidator:

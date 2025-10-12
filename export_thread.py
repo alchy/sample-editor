@@ -21,10 +21,11 @@ class ExportThread(QThread):
     export_completed = Signal(dict)  # export_info dictionary
     export_failed = Signal(str)  # error message
 
-    def __init__(self, mapping: Dict[Tuple[int, int], SampleMetadata], output_folder: Path):
+    def __init__(self, mapping: Dict[Tuple[int, int], SampleMetadata], output_folder: Path, session_manager=None):
         super().__init__()
         self.mapping = mapping
         self.output_folder = output_folder
+        self.session_manager = session_manager
         self.export_manager = None
         self._is_cancelled = False
 
@@ -60,6 +61,31 @@ class ExportThread(QThread):
 
             if self._is_cancelled:
                 return
+
+            # Export instrument-definition.json
+            if self.session_manager:
+                try:
+                    self.progress_updated.emit(95, "Vytvářím instrument-definition.json...")
+
+                    # Získej metadata ze session manageru
+                    metadata = self.session_manager.get_metadata()
+
+                    # Přidej velocity_layers do metadata pro export
+                    if metadata:
+                        metadata['velocity_layers'] = self.session_manager.get_velocity_layers()
+
+                    # Exportuj JSON soubor
+                    json_path = self.export_manager.export_instrument_definition(metadata, self.mapping)
+                    export_info['instrument_definition_path'] = str(json_path)
+
+                    # Inkrementuj verzi nástroje po úspěšném exportu
+                    new_version = self.session_manager.increment_instrument_version()
+                    logger.info(f"Instrument version incremented to: {new_version}")
+
+                except Exception as e:
+                    logger.error(f"Failed to export instrument definition: {e}")
+                    # Neukončuj export kvůli chybě v JSON - pouze loguj
+                    export_info['instrument_definition_error'] = str(e)
 
             # Dokončení
             self.progress_updated.emit(100, f"Export dokončen: {export_info['exported_count']} samples")

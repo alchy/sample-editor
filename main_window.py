@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 
 # Import všech potřebných modulů
+from config import GUI
 from models import SampleMetadata
 from export_utils import ExportManager
 from export_thread import ExportThread
@@ -741,7 +742,8 @@ class MainWindow(QMainWindow):
         try:
             self.export_thread = ExportThread(
                 mapping=self.mapping_matrix.mapping,
-                output_folder=self.export_manager.output_folder
+                output_folder=self.export_manager.output_folder,
+                session_manager=self.session_manager
             )
 
             self.export_thread.progress_updated.connect(self.status_panel.update_progress)
@@ -774,8 +776,16 @@ class MainWindow(QMainWindow):
                    f"Total files: {export_info['total_files']}\n"
                    f"Folder: {self.export_manager.output_folder}")
 
+        # Přidej info o instrument-definition.json pokud byl vytvořen
+        if 'instrument_definition_path' in export_info:
+            message += f"\n\n✓ instrument-definition.json created"
+
         if export_info['failed_count'] > 0:
             message += f"\n\nErrors: {export_info['failed_count']} samples"
+
+        # Varování pokud JSON nebyl vytvořen
+        if 'instrument_definition_error' in export_info:
+            message += f"\n\n⚠ Warning: instrument-definition.json not created:\n{export_info['instrument_definition_error']}"
 
         QMessageBox.information(self, "Export Completed", message)
         self.status_panel.update_status(f"Export completed: {export_info['exported_count']} samples")

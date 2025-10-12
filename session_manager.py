@@ -50,13 +50,14 @@ class SessionManager:
 
         return sorted(session_names)
 
-    def create_new_session(self, session_name: str, velocity_layers: int = 4) -> bool:
+    def create_new_session(self, session_name: str, velocity_layers: int = 4, metadata: dict = None) -> bool:
         """
         Vytvoří novou session.
 
         Args:
             session_name: Název nové session
             velocity_layers: Počet velocity layers (default 4)
+            metadata: Dictionary s metadaty nástroje (instrument_name, author, category, description)
 
         Returns:
             True pokud se podařilo vytvořit, False pokud už existuje
@@ -66,12 +67,25 @@ class SessionManager:
         if session_file.exists():
             return False
 
+        # Připrav metadata s výchozími hodnotami
+        if metadata is None:
+            metadata = {}
+
+        instrument_metadata = {
+            "instrument_name": metadata.get('instrument_name', session_name),
+            "author": metadata.get('author', 'N/A'),
+            "category": metadata.get('category', 'N/A'),
+            "description": metadata.get('description', 'N/A'),
+            "instrument_version": 1  # Starts at 1, increments on each export
+        }
+
         # Vytvoř prázdnou session strukturu
         self.session_data = {
             "session_name": session_name,
             "created": datetime.now().isoformat(),
             "last_modified": datetime.now().isoformat(),
             "velocity_layers": velocity_layers,  # NOVÉ: Počet velocity layers
+            "metadata": instrument_metadata,  # NOVÉ: Metadata pro instrument export
             "folders": {
                 "input": None,
                 "output": None
@@ -88,6 +102,7 @@ class SessionManager:
         self._save_session()
 
         logger.info(f"Created new session: {session_name} with {velocity_layers} velocity layers")
+        logger.info(f"Instrument metadata: {instrument_metadata['instrument_name']} by {instrument_metadata['author']}")
         return True
 
     def load_session(self, session_name: str) -> bool:
@@ -551,6 +566,59 @@ class SessionManager:
             return 4  # Default
 
         return self.session_data.get("velocity_layers", 4)
+
+    def get_metadata(self) -> Optional[Dict]:
+        """
+        Vrátí metadata nástroje pro aktuální session.
+
+        Returns:
+            Dictionary s metadaty nebo None pokud session není načtená
+        """
+        if not self.session_data:
+            return None
+
+        # Pro backwards compatibility s existujícími sessions
+        if "metadata" not in self.session_data:
+            return {
+                "instrument_name": self.session_data.get("session_name", "Unknown"),
+                "author": "N/A",
+                "category": "N/A",
+                "description": "N/A",
+                "instrument_version": 1
+            }
+
+        return self.session_data["metadata"]
+
+    def increment_instrument_version(self) -> int:
+        """
+        Inkrementuje verzi nástroje při exportu.
+
+        Returns:
+            Nová verze nástroje
+        """
+        if not self.session_data:
+            logger.warning("No session data available to increment version")
+            return 1
+
+        # Zajisti že metadata existují
+        if "metadata" not in self.session_data:
+            self.session_data["metadata"] = {
+                "instrument_name": self.session_data.get("session_name", "Unknown"),
+                "author": "N/A",
+                "category": "N/A",
+                "description": "N/A",
+                "instrument_version": 1
+            }
+
+        # Inkrementuj verzi
+        current_version = self.session_data["metadata"].get("instrument_version", 0)
+        new_version = current_version + 1
+        self.session_data["metadata"]["instrument_version"] = new_version
+
+        self._save_session()
+        logger.info(f"Incremented instrument version: {current_version} -> {new_version}")
+
+        return new_version
 
     def get_cache_stats(self) -> Dict:
         """NOVÁ METODA: Vrátí statistiky cache."""

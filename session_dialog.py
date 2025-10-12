@@ -4,7 +4,8 @@ session_dialog.py - Startup dialog pro session management
 
 from typing import Optional
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-                               QListWidget, QLineEdit, QGroupBox, QMessageBox, QFrame, QSpinBox)
+                               QListWidget, QLineEdit, QGroupBox, QMessageBox, QFrame, QSpinBox,
+                               QTextEdit, QScrollArea, QWidget)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QListWidgetItem
@@ -27,7 +28,7 @@ class SessionDialog(QDialog):
 
         self.setWindowTitle(GUI.Texts.SESSION_DIALOG_TITLE)
         self.setModal(True)
-        self.resize(600, 450)
+        self.resize(800, 600)  # Zvětšeno pro nové metadata fieldy
 
         self.init_ui()
         self.refresh_sessions_list()
@@ -221,12 +222,75 @@ class SessionDialog(QDialog):
 
         right_layout.addLayout(velocity_layout)
 
+        # === INSTRUMENT METADATA (pro export JSON) ===
+
+        # Author
+        author_label = QLabel("Author:")
+        author_label.setStyleSheet("color: #2c3e50; margin-top: 10px; margin-bottom: 5px;")
+        right_layout.addWidget(author_label)
+
+        self.author_input = QLineEdit()
+        self.author_input.setPlaceholderText("např. John Doe, Studio XYZ (volitelné)")
+        self.author_input.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #27ae60;
+            }
+        """)
+        right_layout.addWidget(self.author_input)
+
+        # Category
+        category_label = QLabel("Category:")
+        category_label.setStyleSheet("color: #2c3e50; margin-top: 10px; margin-bottom: 5px;")
+        right_layout.addWidget(category_label)
+
+        self.category_input = QLineEdit()
+        self.category_input.setPlaceholderText("např. Piano, Drums, Synth (volitelné)")
+        self.category_input.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #27ae60;
+            }
+        """)
+        right_layout.addWidget(self.category_input)
+
+        # Description
+        description_label = QLabel("Description:")
+        description_label.setStyleSheet("color: #2c3e50; margin-top: 10px; margin-bottom: 5px;")
+        right_layout.addWidget(description_label)
+
+        self.description_input = QTextEdit()
+        self.description_input.setPlaceholderText("Popis nástroje... (volitelné)")
+        self.description_input.setMaximumHeight(60)
+        self.description_input.setStyleSheet("""
+            QTextEdit {
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+            }
+            QTextEdit:focus {
+                border-color: #27ae60;
+            }
+        """)
+        right_layout.addWidget(self.description_input)
+
         # Validation info
         self.validation_label = QLabel("")
         self.validation_label.setStyleSheet("color: #e74c3c; font-size: 10px; margin-top: 5px;")
         right_layout.addWidget(self.validation_label)
 
-        # Spacer
+        # Spacer - menší kvůli novým fieldům
         right_layout.addStretch()
 
         # Create button
@@ -370,21 +434,37 @@ class SessionDialog(QDialog):
             QMessageBox.critical(self, "Chyba", f"Chyba při načítání session:\n{e}")
 
     def _create_new_session(self):
-        """Vytvoří novou session."""
+        """Vytvoří novou session s metadaty."""
         session_name = self.session_name_input.text().strip()
 
         if not self._validate_session_name(session_name):
             return
 
         try:
-            # Získej počet velocity layers z spinboxu
+            # Získej všechna metadata
             velocity_layers = self.velocity_layers_spinbox.value()
+            author = self.author_input.text().strip() or "N/A"
+            category = self.category_input.text().strip() or "N/A"
+            description = self.description_input.toPlainText().strip() or "N/A"
 
-            if self.session_manager.create_new_session(session_name, velocity_layers=velocity_layers):
+            # Instrument name default = session name
+            instrument_name = session_name
+
+            # Metadata dictionary pro JSON export
+            metadata = {
+                'instrument_name': instrument_name,
+                'author': author,
+                'category': category,
+                'description': description,
+            }
+
+            if self.session_manager.create_new_session(session_name,
+                                                      velocity_layers=velocity_layers,
+                                                      metadata=metadata):
                 self.selected_session = session_name
                 self.is_new_session = True
                 self.accept()
-                logger.info(f"New session created: {session_name} with {velocity_layers} velocity layers")
+                logger.info(f"New session created: {session_name} with {velocity_layers} velocity layers and metadata")
             else:
                 QMessageBox.critical(self, "Chyba", f"Session '{session_name}' již existuje")
 
