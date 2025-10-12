@@ -327,7 +327,7 @@ class AudioWorker:
         # Zastaví předchozí přehrávání
         if self.is_playing:
             sd.stop()
-            time.sleep(AUDIO.Timing.WORKER_LOOP_SLEEP)
+            time.sleep(AUDIO.Timing.PLAYBACK_CLEANUP_DELAY)
 
         # Generuj tón
         sample_rate = AUDIO.Audio.DEFAULT_SAMPLE_RATE

@@ -8,6 +8,7 @@ from typing import Optional
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QPushButton, QLabel
 
+from config import GUI, AUDIO
 from models import SampleMetadata
 from midi_utils import MidiUtils
 from audio_worker import get_audio_worker, AUDIO_AVAILABLE
@@ -39,7 +40,7 @@ class AudioPlayer(QGroupBox):
     status_changed = Signal(int)  # compatibility
 
     def __init__(self):
-        super().__init__("Audio Player")
+        super().__init__(GUI.Texts.AUDIO_PLAYER_TITLE)
         self.current_sample: Optional[SampleMetadata] = None
         self.is_playing = False
         self.is_comparing = False
@@ -68,51 +69,51 @@ class AudioPlayer(QGroupBox):
         layout = QVBoxLayout()
 
         # Status label
-        self.status_label = QLabel("Audio připraven" if AUDIO_AVAILABLE else "Audio není k dispozici")
+        self.status_label = QLabel(GUI.Texts.AUDIO_READY if AUDIO_AVAILABLE else GUI.Texts.AUDIO_NOT_AVAILABLE)
         layout.addWidget(self.status_label)
 
         # Control buttons
         button_layout = QVBoxLayout()
 
-        self.play_button = QPushButton("Přehrát (Mezerník)")
+        self.play_button = QPushButton(GUI.Texts.BTN_PLAY)
         self.play_button.clicked.connect(self.play_current_sample)
         self.play_button.setEnabled(False)
         button_layout.addWidget(self.play_button)
 
-        self.stop_button = QPushButton("Stop (ESC)")
+        self.stop_button = QPushButton(GUI.Texts.BTN_STOP)
         self.stop_button.clicked.connect(self.stop_playback)
         self.stop_button.setEnabled(False)
         button_layout.addWidget(self.stop_button)
 
         layout.addLayout(button_layout)
         self.setLayout(layout)
-        self.setMaximumHeight(150)
+        self.setMaximumHeight(GUI.Dimensions.AUDIO_PLAYER_HEIGHT)
 
     def set_current_sample(self, sample: SampleMetadata):
         """Nastaví aktuální sample pro přehrávání."""
         self.current_sample = sample
         self.play_button.setEnabled(sample is not None and AUDIO_AVAILABLE)
         if sample:
-            self.status_label.setText(f"Nastaven: {sample.filename}")
+            self.status_label.setText(GUI.Texts.AUDIO_SAMPLE_SET.format(filename=sample.filename))
         else:
-            self.status_label.setText("Žádný sample vybrán")
+            self.status_label.setText(GUI.Texts.AUDIO_NO_SAMPLE)
         logger.debug(f"Nastaven sample: {sample.filename if sample else 'None'}")
 
     def play_current_sample(self):
         """Přehraje aktuálně vybraný sample."""
         if not AUDIO_AVAILABLE:
-            self.status_label.setText("Audio knihovny nejsou k dispozici")
+            self.status_label.setText(GUI.Texts.AUDIO_NOT_AVAILABLE)
             return
 
         if not self.current_sample:
-            self.status_label.setText("Žádný sample není vybrán")
+            self.status_label.setText(GUI.Texts.AUDIO_NO_SAMPLE)
             return
 
         # Zastaví předchozí přehrávání bez duplicitního spuštění
         if self.is_playing or self.is_comparing:
             self.stop_playback()
             # Krátké zpoždění pro čisté zastavení
-            QTimer.singleShot(50, self._delayed_play_current)
+            QTimer.singleShot(AUDIO.Timing.STOP_DELAY, self._delayed_play_current)
             return
 
         self._delayed_play_current()
@@ -139,10 +140,10 @@ class AudioPlayer(QGroupBox):
         """
         if not AUDIO_AVAILABLE:
             logger.warning("Cannot play MIDI tone - audio not available")
-            self.status_label.setText("Audio není k dispozici")
+            self.status_label.setText(GUI.Texts.AUDIO_NOT_AVAILABLE)
             return
 
-        if not (21 <= midi_note <= 108):
+        if not (AUDIO.MIDI.PIANO_MIN_MIDI <= midi_note <= AUDIO.MIDI.PIANO_MAX_MIDI):
             logger.warning(f"MIDI nota {midi_note} není v piano rozsahu")
             return
 
@@ -152,18 +153,18 @@ class AudioPlayer(QGroupBox):
                 midi_note = kwargs.get('midi_note')
                 frequency = kwargs.get('frequency')
                 note_name = MidiUtils.midi_to_note_name(midi_note)
-                self.status_label.setText(f"✓ MIDI tón: {note_name} ({frequency:.1f} Hz)")
+                self.status_label.setText(GUI.Texts.AUDIO_MIDI_SUCCESS.format(note_name=note_name, frequency=frequency))
                 self.playback_started.emit(f"MIDI {note_name}")
                 logger.debug(f"MIDI tone {midi_note} playback completed")
             else:
                 error = kwargs.get('error', 'Unknown error')
-                self.status_label.setText(f"Chyba MIDI: {error}")
+                self.status_label.setText(GUI.Texts.AUDIO_MIDI_ERROR.format(error=error))
                 self.playback_error.emit(error)
                 logger.error(f"MIDI tone playback failed: {error}")
 
         # Pošli do audio worker threadu
         note_name = MidiUtils.midi_to_note_name(midi_note)
-        self.status_label.setText(f"♪ Přehrává MIDI tón: {note_name}...")
+        self.status_label.setText(GUI.Texts.AUDIO_MIDI_PLAYING.format(note_name=note_name))
         self.audio_worker.play_midi_tone(midi_note, callback=on_playback_complete)
         logger.debug(f"MIDI tone {midi_note} queued for playback in worker thread")
 
@@ -181,7 +182,7 @@ class AudioPlayer(QGroupBox):
                 self.playback_timer.stop()
                 self.auto_stop_timer.stop()
                 self.stop_button.setEnabled(False)
-                self.status_label.setText("Zastaveno")
+                self.status_label.setText(GUI.Texts.AUDIO_STOPPED)
                 self.playback_stopped.emit()
                 logger.debug("Přehrávání zastaveno")
             except Exception as e:
@@ -216,7 +217,7 @@ class AudioPlayer(QGroupBox):
 
         # Normalizace hlasitosti
         if np.max(np.abs(audio_data)) > 0:
-            audio_data = audio_data / np.max(np.abs(audio_data)) * 0.7  # 70% max volume
+            audio_data = audio_data / np.max(np.abs(audio_data)) * AUDIO.Audio.VOLUME_SAMPLE
 
         self.audio_data = audio_data
         self.sample_rate = sample_rate
@@ -227,10 +228,10 @@ class AudioPlayer(QGroupBox):
         self.stop_button.setEnabled(True)
 
         # Auto-stop timer
-        duration_ms = int(len(audio_data) / sample_rate * 1000) + 100
+        duration_ms = int(len(audio_data) / sample_rate * 1000) + AUDIO.Timing.AUTO_STOP_BUFFER
         self.auto_stop_timer.start(duration_ms)
 
-        self.status_label.setText(f"▶ Přehrává: {sample.filename}")
+        self.status_label.setText(GUI.Texts.AUDIO_PLAYING.format(filename=sample.filename))
         self.playback_started.emit(sample.filename)
         logger.info(f"Přehrávání spuštěno: {sample.filename} ({len(audio_data) / sample_rate:.1f}s)")
 
