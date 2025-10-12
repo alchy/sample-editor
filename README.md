@@ -1,108 +1,10 @@
-# Sample Editor (PySide6 GUI)
-
-Professional sample mapping and export tool for musicians and sound designers. This repository contains a desktop GUI application built with Python and PySide6 (Qt for Python). It analyzes audio samples (pitch via CREPE, amplitude/RMS), lets you map them across the keyboard with velocity layers, and exports organized WAV files.
-
-This README adds technical details for setup, running, tests, and project structure. The detailed feature documentation from the previous README is kept below for convenience.
-
-## Overview
-- Language: Python 3.x
-- Frameworks/Libraries: PySide6 (Qt), sounddevice, soundfile, librosa, TensorFlow + CREPE (for pitch detection)
-- Package manager: pip (requirements.txt / requirements-dev.txt)
-- Entry point: main.py (launches the GUI)
-
-## Requirements
-- Python: 3.9–3.12 recommended
-- OS: Windows, macOS, or Linux with system audio configured
-- Runtime deps: see requirements.txt
-- Dev/test deps (optional): see requirements-dev.txt
-
-Install dependencies:
-- Windows (PowerShell)
-  - python -m venv .venv
-  - .venv\\Scripts\\Activate
-  - pip install --upgrade pip
-  - pip install -r requirements.txt
-- macOS/Linux (bash)
-  - python3 -m venv .venv
-  - source .venv/bin/activate
-  - python -m pip install --upgrade pip
-  - pip install -r requirements.txt
-
-Notes:
-- Optional heavy deps (TensorFlow + CREPE) are included in requirements.txt for full pitch-detection functionality.
-- requirements.txt appears to contain a corrupted trailing line. If installation fails near the end, open the file and remove the last non-ASCII line. TODO: Clean the file and pin only necessary versions.
-
-## Setup and Run
-- Activate your virtual environment
-- Install dependencies (see above)
-- Launch the application:
-  - Windows: python .\\main.py
-  - macOS/Linux: python3 ./main.py
-
-The GUI will open. On first run with CREPE/TensorFlow, model load can take tens of seconds.
-
-## Scripts and Common Commands
-There is no pyproject.toml or setup.py with defined scripts. Use these direct commands instead:
-- Run app: python main.py
-- Run tests: pytest
-- Run tests with markers:
-  - unit only: pytest -m unit
-  - integration only: pytest -m integration
-  - include slow tests: pytest -m "unit or integration or slow"
-- Verbose, short tracebacks (default via pytest.ini): pytest -v --tb=short
-- Lint/format (if you installed requirements-dev.txt):
-  - flake8
-  - black .
-  - mypy .
-
-## Environment Variables
-No required environment variables are defined by the project at this time. Potential optional variables you might consider for your environment:
-- TODO AUDIODEVICE or SOUNDDEVICE-related configuration to force a specific audio device
-- TODO QT_QPA_PLATFORM to change Qt backend in headless/CI runs (e.g., "offscreen")
-- TODO TensorFlow settings (e.g., to disable GPU if needed: CUDA_VISIBLE_DEVICES="")
-
-If you intend to run GUI tests in CI, you may need a virtual display (Xvfb on Linux) or to set Qt to offscreen.
-
-## Tests
-- Framework: pytest (configured via pytest.ini)
-- Test locations: tests/
-- Markers (see pytest.ini): unit, integration, slow
-- GUI testing helpers: pytest-qt is present in runtime requirements
-
-Examples:
-- Run all: pytest
-- Run unit tests only: pytest -m unit
-- Show durations of slow tests: pytest -m slow -vv
-
-## Project Structure
-High-level layout of this repository:
-- main.py — GUI entry point (sets up QApplication, MainWindow, graceful shutdown, audio worker shutdown)
-- main_window.py — Main window and menu/shortcut wiring
-- sample_editor_widget.py — Central editor UI widgets
-- audio_analyzer.py, pitch_detector.py, session_aware_analyzer*.py — Analysis logic (CREPE/RMS, caching)
-- audio_player.py, audio_worker.py — Playback and background audio worker
-- drag_drop_* — Drag & drop helpers and mapping matrix components
-- export_thread.py, export_utils.py — Asynchronous export and helpers
-- sessions/ — Session files (JSON) persisted by the app
-- tests/ — Unit and integration tests (pytest)
-- requirements.txt — Runtime dependencies (note: last line may be corrupted; see TODO above)
-- requirements-dev.txt — Dev/test tooling (pytest, black, flake8, mypy, etc.)
-- pytest.ini — Pytest configuration (paths, markers, options)
-- core/, models.py, midi_utils.py, inline_midi_editor.py, amplitude_*.py — Supporting modules
-- src/ — Present in repo; currently not the primary entrypoint path
-
-For a quick file list, see the sections below or your IDE’s project tree.
-
-## License
-No LICENSE file is present in the repository. Until a license is added, treat this code as “All rights reserved” and do not redistribute. TODO: Add an explicit LICENSE (e.g., MIT/Apache-2.0) and update this section.
-
----
-
-Below is the original, detailed feature guide retained for users.
-
-# Sampler Editor - Professional Version
+# Sample Editor - Professional Version
 
 Professional sample mapping tool with advanced pitch detection, velocity analysis, and intelligent session management.
+
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
+[![PySide6](https://img.shields.io/badge/PySide6-Qt6-green)](https://www.qt.io/)
+[![License](https://img.shields.io/badge/License-Pending-orange)]()
 
 ## 🎯 Key Features
 
@@ -121,20 +23,338 @@ Professional sample mapping tool with advanced pitch detection, velocity analysi
 - **🔊 Dual Audio Preview** - Sample playback + reference MIDI tone comparison
 - **🎛️ Configurable Velocity Layers** - 1-8 velocity layers per session
 - **📋 GUI Menu Integration** - All keyboard shortcuts accessible via menu
+- **⚙️ Centralized Configuration** - Type-safe config module for all constants
+
+---
+
+## 📊 Architecture Overview
+
+### High-Level System Architecture
+
+```mermaid
+graph TB
+    subgraph "Entry Point"
+        MAIN[main.py<br/>Application Entry]
+    end
+
+    subgraph "UI Layer"
+        MAINWIN[main_window.py<br/>Main Window & Menu]
+        SAMPLELIST[drag_drop_sample_list.py<br/>Sample List Widget]
+        MATRIX[drag_drop_mapping_matrix.py<br/>Mapping Matrix]
+        MATRIXCORE[drag_drop_matrix_core.py<br/>Matrix Cells]
+        MIDIEDITOR[inline_midi_editor.py<br/>MIDI Transpose Editor]
+        AUDIOPLAYER[audio_player.py<br/>Audio Player]
+        SESSION_DLG[session_dialog.py<br/>Session Dialog]
+    end
+
+    subgraph "Business Logic"
+        SESSION[session_manager.py<br/>Session Management]
+        ANALYZER[session_aware_analyzer.py<br/>Audio Analysis]
+        EXPORT[export_thread.py<br/>Export Thread]
+        EXPORTUTIL[export_utils.py<br/>Export Manager]
+    end
+
+    subgraph "Audio Processing"
+        AUDIOWORKER[audio_worker.py<br/>Audio Worker Thread]
+    end
+
+    subgraph "Data & Utilities"
+        MODELS[models.py<br/>Data Models]
+        MIDIUTILS[midi_utils.py<br/>MIDI Utils]
+        CONFIG[config/<br/>Centralized Config]
+    end
+
+    MAIN --> MAINWIN
+    MAIN --> AUDIOWORKER
+
+    MAINWIN --> SAMPLELIST
+    MAINWIN --> MATRIX
+    MAINWIN --> AUDIOPLAYER
+    MAINWIN --> SESSION_DLG
+    MAINWIN --> SESSION
+    MAINWIN --> ANALYZER
+    MAINWIN --> EXPORT
+
+    SAMPLELIST --> MIDIEDITOR
+    MATRIX --> MATRIXCORE
+
+    AUDIOPLAYER --> AUDIOWORKER
+
+    EXPORT --> EXPORTUTIL
+
+    SAMPLELIST --> MODELS
+    MATRIX --> MODELS
+    MATRIXCORE --> MODELS
+    MIDIEDITOR --> MODELS
+    SESSION --> MODELS
+    ANALYZER --> MODELS
+    EXPORT --> MODELS
+    EXPORTUTIL --> MODELS
+
+    MIDIEDITOR --> MIDIUTILS
+    MATRIX --> MIDIUTILS
+    MATRIXCORE --> MIDIUTILS
+    EXPORTUTIL --> MIDIUTILS
+    EXPORT --> MIDIUTILS
+
+    AUDIOPLAYER --> CONFIG
+    AUDIOWORKER --> CONFIG
+    EXPORTUTIL --> CONFIG
+    MIDIUTILS --> CONFIG
+
+    classDef entry fill:#ff6b6b,stroke:#c92a2a,color:#fff,stroke-width:3px
+    classDef ui fill:#4c6ef5,stroke:#364fc7,color:#fff
+    classDef logic fill:#51cf66,stroke:#2f9e44,color:#fff
+    classDef audio fill:#ffd43b,stroke:#fab005,color:#000
+    classDef data fill:#74c0fc,stroke:#4dabf7,color:#fff
+
+    class MAIN entry
+    class MAINWIN,SAMPLELIST,MATRIX,MATRIXCORE,MIDIEDITOR,AUDIOPLAYER,SESSION_DLG ui
+    class SESSION,ANALYZER,EXPORT,EXPORTUTIL logic
+    class AUDIOWORKER audio
+    class MODELS,MIDIUTILS,CONFIG data
+```
+
+### Module Dependencies
+
+```mermaid
+graph LR
+    subgraph "Core Modules"
+        CONFIG[config/<br/>Configuration]
+        MODELS[models.py<br/>Data Models]
+        MIDIUTILS[midi_utils.py<br/>MIDI Utils]
+    end
+
+    subgraph "UI Widgets"
+        SAMPLELIST[drag_drop_sample_list.py]
+        MIDIEDITOR[inline_midi_editor.py]
+        MATRIX[drag_drop_mapping_matrix.py]
+        MATRIXCORE[drag_drop_matrix_core.py]
+        AUDIOPLAYER[audio_player.py]
+    end
+
+    subgraph "Session & Export"
+        SESSION[session_manager.py]
+        DIALOG[session_dialog.py]
+        ANALYZER[session_aware_analyzer.py]
+        EXPORT[export_thread.py]
+        EXPORTUTIL[export_utils.py]
+    end
+
+    subgraph "Audio"
+        AUDIOWORKER[audio_worker.py]
+    end
+
+    %% Dependencies
+    MIDIUTILS --> CONFIG
+    AUDIOPLAYER --> CONFIG
+    AUDIOWORKER --> CONFIG
+    EXPORTUTIL --> CONFIG
+
+    SAMPLELIST --> MODELS
+    MIDIEDITOR --> MODELS
+    MATRIX --> MODELS
+    MATRIXCORE --> MODELS
+    AUDIOPLAYER --> MODELS
+    SESSION --> MODELS
+    ANALYZER --> MODELS
+    EXPORT --> MODELS
+    EXPORTUTIL --> MODELS
+
+    MIDIEDITOR --> MIDIUTILS
+    MATRIX --> MIDIUTILS
+    MATRIXCORE --> MIDIUTILS
+    EXPORT --> MIDIUTILS
+    EXPORTUTIL --> MIDIUTILS
+
+    SAMPLELIST --> MIDIEDITOR
+    MATRIX --> MATRIXCORE
+    AUDIOPLAYER --> AUDIOWORKER
+    DIALOG --> SESSION
+    EXPORT --> EXPORTUTIL
+
+    classDef core fill:#51cf66,stroke:#2f9e44,color:#fff
+    classDef ui fill:#4c6ef5,stroke:#364fc7,color:#fff
+    classDef session fill:#ffd43b,stroke:#fab005,color:#000
+    classDef audio fill:#ff8787,stroke:#fa5252,color:#fff
+
+    class CONFIG,MODELS,MIDIUTILS core
+    class SAMPLELIST,MIDIEDITOR,MATRIX,MATRIXCORE,AUDIOPLAYER ui
+    class SESSION,DIALOG,ANALYZER,EXPORT,EXPORTUTIL session
+    class AUDIOWORKER audio
+```
+
+### Configuration Module Structure
+
+```mermaid
+graph TB
+    subgraph "config/ Directory"
+        INIT[__init__.py<br/>Exports: GUI, AUDIO, EXPORT, APP]
+
+        GUI_CFG[gui_config.py<br/>GUI Constants]
+        AUDIO_CFG[audio_config.py<br/>Audio Constants]
+        EXPORT_CFG[export_config.py<br/>Export Constants]
+        APP_CFG[app_config.py<br/>App Constants]
+
+        INIT --> GUI_CFG
+        INIT --> AUDIO_CFG
+        INIT --> EXPORT_CFG
+        INIT --> APP_CFG
+    end
+
+    subgraph "GUI Configuration"
+        COLORS[Colors<br/>Theme colors]
+        DIMS[Dimensions<br/>Widget sizes]
+        SPACING[Spacing<br/>Layout spacing]
+        FONTS[Fonts<br/>Font settings]
+        TEXTS[Texts<br/>UI strings]
+        STYLES[Styles<br/>QSS styles]
+
+        GUI_CFG --> COLORS
+        GUI_CFG --> DIMS
+        GUI_CFG --> SPACING
+        GUI_CFG --> FONTS
+        GUI_CFG --> TEXTS
+        GUI_CFG --> STYLES
+    end
+
+    subgraph "Audio Configuration"
+        MIDI[MIDI<br/>MIDI constants]
+        VELOCITY[Velocity<br/>Velocity layers]
+        AUDIO[Audio<br/>Audio params]
+        TIMING[Timing<br/>Timing params]
+        TRANSPOSE[Transpose<br/>Transpose limits]
+        SR_MAP[SampleRateMapping<br/>Sample rate suffixes]
+        ANALYSIS[Analysis<br/>Analysis params]
+
+        AUDIO_CFG --> MIDI
+        AUDIO_CFG --> VELOCITY
+        AUDIO_CFG --> AUDIO
+        AUDIO_CFG --> TIMING
+        AUDIO_CFG --> TRANSPOSE
+        AUDIO_CFG --> SR_MAP
+        AUDIO_CFG --> ANALYSIS
+    end
+
+    subgraph "Export Configuration"
+        FORMATS[ExportFormats<br/>Sample rates]
+        PROGRESS[ExportProgress<br/>Progress settings]
+        VALIDATION[ExportValidation<br/>Validation rules]
+        ERRORS[ExportErrors<br/>Error messages]
+        NAMING[ExportFileNaming<br/>File naming]
+        AUDIO_PARAMS[AudioExportParams<br/>Export quality]
+
+        EXPORT_CFG --> FORMATS
+        EXPORT_CFG --> PROGRESS
+        EXPORT_CFG --> VALIDATION
+        EXPORT_CFG --> ERRORS
+        EXPORT_CFG --> NAMING
+        EXPORT_CFG --> AUDIO_PARAMS
+    end
+
+    subgraph "App Configuration"
+        APP_INFO[AppInfo<br/>Version, name]
+        CACHE[CacheConfig<br/>Cache settings]
+        SESSION_CFG[SessionConfig<br/>Session params]
+        FILTERS[FileFilters<br/>File patterns]
+        INTERVALS[UpdateIntervals<br/>UI update timing]
+        LOGGING[LoggingConfig<br/>Log settings]
+
+        APP_CFG --> APP_INFO
+        APP_CFG --> CACHE
+        APP_CFG --> SESSION_CFG
+        APP_CFG --> FILTERS
+        APP_CFG --> INTERVALS
+        APP_CFG --> LOGGING
+    end
+
+    classDef config fill:#51cf66,stroke:#2f9e44,color:#fff,stroke-width:2px
+    classDef category fill:#4c6ef5,stroke:#364fc7,color:#fff
+    classDef detail fill:#74c0fc,stroke:#4dabf7,color:#fff
+
+    class INIT config
+    class GUI_CFG,AUDIO_CFG,EXPORT_CFG,APP_CFG category
+    class COLORS,DIMS,SPACING,FONTS,TEXTS,STYLES,MIDI,VELOCITY,AUDIO,TIMING,TRANSPOSE,SR_MAP,ANALYSIS,FORMATS,PROGRESS,VALIDATION,ERRORS,NAMING,AUDIO_PARAMS,APP_INFO,CACHE,SESSION_CFG,FILTERS,INTERVALS,LOGGING detail
+```
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant MainWindow
+    participant SessionManager
+    participant Analyzer
+    participant SampleList
+    participant Matrix
+    participant ExportThread
+
+    User->>MainWindow: Launch App
+    MainWindow->>SessionManager: Show Session Dialog
+    SessionManager-->>MainWindow: Session Selected
+
+    User->>MainWindow: Set Input Folder
+    MainWindow->>SessionManager: Check Cache
+    SessionManager-->>MainWindow: Return Cached Data
+    MainWindow->>Analyzer: Analyze New Files
+
+    loop For Each Sample
+        Analyzer->>Analyzer: Pitch Detection (CREPE)
+        Analyzer->>Analyzer: Amplitude Analysis (RMS)
+        Analyzer-->>MainWindow: Sample Analyzed
+        MainWindow->>SampleList: Update UI
+    end
+
+    Analyzer-->>MainWindow: Analysis Complete
+    MainWindow->>SessionManager: Cache Results
+
+    User->>SampleList: Drag Sample
+    SampleList->>Matrix: Drop Sample
+    Matrix-->>MainWindow: Sample Mapped
+    MainWindow->>SessionManager: Save Mapping
+
+    User->>MainWindow: Export Samples
+    MainWindow->>ExportThread: Start Export
+
+    loop For Each Mapped Sample
+        ExportThread->>ExportThread: Resample Audio
+        ExportThread->>ExportThread: Write Files
+        ExportThread-->>MainWindow: Progress Update
+    end
+
+    ExportThread-->>MainWindow: Export Complete
+    MainWindow-->>User: Show Results
+```
+
+---
 
 ## 🚀 Installation
 
 ### Requirements
-- Python 3.8+
-- PySide6 (Qt6)
-- Audio libraries (sounddevice, soundfile, librosa)
-- TensorFlow + CREPE (optional, for pitch detection)
+- **Python:** 3.9–3.12 recommended
+- **OS:** Windows, macOS, or Linux with system audio configured
+- **Dependencies:** See requirements.txt
 
+### Setup
+
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**macOS/Linux (bash):**
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
 ### Optional Dependencies
+
 ```bash
 # For CREPE pitch detection (recommended)
 pip install crepe tensorflow
@@ -142,6 +362,106 @@ pip install crepe tensorflow
 # For enhanced audio support
 pip install librosa
 ```
+
+### Launch Application
+
+```bash
+python main.py
+```
+
+---
+
+## 📁 Project Structure
+
+### Root Directory Layout
+
+```
+sample-editor/
+├── main.py                          # 🚀 Application entry point
+├── main_window.py                   # 🖼️ Main window & menu bar
+│
+├── config/                          # ⚙️ Centralized configuration
+│   ├── __init__.py                  #    Exports: GUI, AUDIO, EXPORT, APP
+│   ├── gui_config.py                #    GUI constants (colors, dimensions, texts)
+│   ├── audio_config.py              #    Audio constants (MIDI, velocity, timing)
+│   ├── export_config.py             #    Export constants (formats, validation)
+│   └── app_config.py                #    App constants (cache, session, logging)
+│
+├── models.py                        # 📦 Data models (compatibility shim)
+├── midi_utils.py                    # 🎹 MIDI utility functions
+│
+├── drag_drop_sample_list.py        # 📋 Sample list widget with drag-drop
+├── inline_midi_editor.py            # ✏️ Inline MIDI transpose editor
+├── drag_drop_mapping_matrix.py     # 🎯 Mapping matrix widget
+├── drag_drop_matrix_core.py        # 🔲 Matrix cell implementation
+│
+├── audio_player.py                  # 🔊 Audio player widget
+├── audio_worker.py                  # 🎵 Audio worker thread (MIDI tones)
+│
+├── session_manager.py               # 💾 Session management & caching
+├── session_dialog.py                # 🗂️ Session selection dialog
+├── session_aware_analyzer.py       # 📊 Batch audio analyzer
+│
+├── export_thread.py                 # 📤 Async export thread
+├── export_utils.py                  # 🔧 Export manager & validation
+│
+├── sessions/                        # 💾 Session files (JSON)
+│   └── *.json                       #    Session data & cache
+│
+├── src/                             # 🏗️ Refactored architecture (DDD)
+│   ├── domain/                      #    Domain models & interfaces
+│   ├── application/                 #    Application services
+│   ├── infrastructure/              #    Infrastructure implementations
+│   └── presentation/                #    Presentation layer
+│
+├── tests/                           # 🧪 Unit & integration tests
+│   ├── unit/                        #    Unit tests
+│   └── integration/                 #    Integration tests
+│
+├── __old__/                         # 🗄️ Deprecated/old files
+│
+├── requirements.txt                 # 📦 Runtime dependencies
+├── requirements-dev.txt             # 🛠️ Development dependencies
+├── pytest.ini                       # ⚙️ Pytest configuration
+└── README.md                        # 📖 This file
+```
+
+### Key Module Responsibilities
+
+#### Entry Point
+- **main.py** - Initializes Qt application, handles graceful shutdown
+
+#### Core UI
+- **main_window.py** - Main application window, orchestrates all functionality
+- **drag_drop_sample_list.py** - Sample list with drag-drop and inline editing
+- **drag_drop_mapping_matrix.py** - MIDI note mapping matrix
+- **inline_midi_editor.py** - Per-sample transpose controls
+
+#### Audio
+- **audio_player.py** - Audio playback widget with sample and MIDI tone preview
+- **audio_worker.py** - Dedicated worker thread for non-blocking audio playback
+
+#### Session & Analysis
+- **session_manager.py** - Session persistence with MD5-based caching
+- **session_dialog.py** - Session creation/selection dialog
+- **session_aware_analyzer.py** - Batch audio analyzer with cache integration
+
+#### Export
+- **export_thread.py** - Asynchronous export with progress reporting
+- **export_utils.py** - Export manager with sample rate conversion
+
+#### Configuration
+- **config/** - Centralized type-safe configuration module:
+  - `gui_config.py` - UI constants (colors, dimensions, texts, styles)
+  - `audio_config.py` - Audio constants (MIDI, velocity, timing, analysis)
+  - `export_config.py` - Export constants (formats, validation, error messages)
+  - `app_config.py` - Application constants (cache, session, logging)
+
+#### Utilities
+- **midi_utils.py** - MIDI utilities (note conversion, filename generation)
+- **models.py** - Data models (compatibility shim for src/ refactoring)
+
+---
 
 ## 📖 Quick Start
 
@@ -175,6 +495,8 @@ python main.py
 - **Output:** Set folder (`Ctrl+O`)
 - **Format:** `mXXX-velY-fZZ.wav` (MIDI-velocity-samplerate)
 
+---
+
 ## 🎮 Interface Guide
 
 ### Sample List (Left Panel - 40%)
@@ -182,7 +504,7 @@ python main.py
 |---------|----------|
 | **⋮⋮ Drag button** | Drag sample to mapping matrix |
 | **☐ Disable checkbox** | Temporarily exclude sample |
-| **MIDI number** | Detected MIDI note |
+| **MIDI number** | Detected MIDI note (editable) |
 | **Note name** | Musical note (e.g., C4, F#3) |
 | **RMS value** | Amplitude (velocity) measurement |
 | **-12/-1/+1/+12** | Transpose pitch detection |
@@ -199,9 +521,11 @@ python main.py
 | **Velocity layers** | V0-V7 (or custom 1-8 layers) |
 
 ### Audio Player Panel
-- **Volume control** - Adjust playback volume
-- **MIDI output** - Virtual MIDI device for reference tones
-- **Stop button** - Halt playback
+- **Play/Stop controls** - Audio playback management
+- **MIDI tone support** - Reference tone generation
+- **Worker thread** - Non-blocking audio processing
+
+---
 
 ## ⌨️ Keyboard Shortcuts
 
@@ -228,12 +552,7 @@ python main.py
 | `M` | Play Reference MIDI Tone |
 | `Esc` | Stop Playback |
 
-### Sample List Shortcuts
-| Shortcut | Action |
-|----------|--------|
-| `S` | Compare playback |
-| `D` | Simultaneous playback |
-| `T` | Sort samples |
+---
 
 ## 💾 Session Management
 
@@ -279,6 +598,8 @@ Sessions store and cache:
 - 🔒 **Data Persistence:** All edits and transposes saved automatically
 - 📊 **Session Stats:** Track cached vs newly analyzed samples
 
+---
+
 ## 📦 Export Format
 
 ### Naming Convention
@@ -298,7 +619,180 @@ mXXX-velY-fZZ.wav
 - **Format:** 16-bit PCM WAV
 - **Sample Rates:** 44.1kHz and 48kHz (simultaneous)
 - **Channels:** Mono or Stereo (preserves source)
-- **Processing:** Direct copy (no pitch shifting)
+- **Processing:** High-quality resampling (kaiser_best)
+- **Validation:** Pre-export validation with error reporting
+
+---
+
+## 🔧 Configuration System
+
+The application uses a centralized configuration module for type-safe access to all constants:
+
+```python
+from config import GUI, AUDIO, EXPORT, APP
+
+# GUI configuration
+button_width = GUI.Dimensions.BTN_DRAG_WIDTH
+primary_color = GUI.Colors.PRIMARY
+status_text = GUI.Texts.AUDIO_READY
+
+# Audio configuration
+piano_range = (AUDIO.MIDI.PIANO_MIN_MIDI, AUDIO.MIDI.PIANO_MAX_MIDI)
+velocity_levels = AUDIO.Velocity.EXPORT_MAX + 1
+sample_rate = AUDIO.Audio.DEFAULT_SAMPLE_RATE
+
+# Export configuration
+export_formats = EXPORT.Formats.FORMATS
+resample_quality = EXPORT.AudioParams.RESAMPLE_QUALITY
+error_message = EXPORT.Errors.NO_SAMPLES
+
+# App configuration
+app_version = APP.Info.VERSION
+cache_ttl = APP.Cache.DEFAULT_TTL
+session_folder = APP.Paths.SESSIONS_FOLDER
+```
+
+### Configuration Categories
+
+#### GUI Configuration (gui_config.py)
+- **Colors** - Theme and status colors
+- **Dimensions** - Widget sizes and constraints
+- **Spacing** - Layout spacing and margins
+- **Fonts** - Font families and sizes
+- **Texts** - UI strings and messages
+- **Formatting** - Number and text formatting
+- **Styles** - QSS stylesheets
+
+#### Audio Configuration (audio_config.py)
+- **MIDI** - MIDI constants (note ranges, frequencies)
+- **Velocity** - Velocity layer configuration
+- **Audio** - Audio parameters (sample rates, volumes)
+- **Timing** - Timing parameters (delays, durations)
+- **Transpose** - Transpose limits and increments
+- **ChunkSizes** - Audio processing chunk sizes
+- **SampleRateMapping** - Sample rate suffix mapping
+- **Analysis** - Analysis parameters (window sizes, methods)
+
+#### Export Configuration (export_config.py)
+- **ExportFormats** - Export sample rate formats
+- **ExportProgress** - Progress bar settings
+- **ExportValidation** - Validation rules
+- **ExportErrors** - Error message templates
+- **ExportFileNaming** - File naming patterns
+- **AudioExportParams** - Audio quality parameters
+- **BatchProcessing** - Batch export settings
+- **ExportStatistics** - Statistics tracking
+
+#### App Configuration (app_config.py)
+- **AppInfo** - Application metadata (version, name)
+- **CacheConfig** - Cache settings (TTL, max size)
+- **SessionConfig** - Session parameters
+- **FileFilters** - File type filters
+- **UpdateIntervals** - UI update intervals
+- **BatchConfig** - Batch processing settings
+- **LoggingConfig** - Logging configuration
+- **Paths** - Default paths
+- **ValidationRules** - Validation parameters
+- **Defaults** - Default values
+
+---
+
+## 🧪 Testing
+
+### Run Tests
+
+```bash
+# All tests
+pytest
+
+# Unit tests only
+pytest -m unit
+
+# Integration tests
+pytest -m integration
+
+# Verbose with short tracebacks
+pytest -v --tb=short
+
+# Show test durations
+pytest --durations=10
+```
+
+### Test Structure
+```
+tests/
+├── unit/
+│   ├── domain/
+│   ├── application/
+│   └── infrastructure/
+└── integration/
+```
+
+---
+
+## 🛠️ Development
+
+### Code Style
+
+```bash
+# Format code
+black .
+
+# Lint
+flake8
+
+# Type checking
+mypy .
+```
+
+### Project Commands
+
+```bash
+# Run application
+python main.py
+
+# Run tests
+pytest
+
+# Install dev dependencies
+pip install -r requirements-dev.txt
+```
+
+---
+
+## 🏗️ Technical Architecture
+
+### Technology Stack
+- **GUI Framework:** PySide6 (Qt6 for Python)
+- **Audio I/O:** sounddevice, soundfile
+- **Audio Analysis:** librosa (spectral analysis)
+- **Pitch Detection:** TensorFlow + CREPE neural network
+- **Session Storage:** JSON with MD5 hashing
+- **Threading:** Multi-threaded analysis, async export
+- **Configuration:** Type-safe centralized config module
+
+### Architecture Pattern
+- **Clean Architecture:** Domain/Application/Infrastructure layers (in progress)
+- **Repository Pattern:** Session data persistence
+- **Observer Pattern:** Signal-based UI updates (Qt signals)
+- **Worker Pattern:** Background audio processing
+- **Factory Pattern:** Audio analyzer creation
+
+### Performance Optimizations
+- **Progressive UI Creation:** QTimer-based incremental loading
+- **Drag Operation Locking:** Race condition prevention
+- **MD5 Caching:** Instant cache validation
+- **Batch Analysis:** Multi-sample processing
+- **Worker Threads:** Non-blocking audio playback
+
+### Safety Features
+- **UI Creation Lock:** Prevents drag during progressive loading
+- **Drag Operation Lock:** Prevents rebuild during drag
+- **Session Auto-save:** On close and after major operations
+- **Hash Validation:** Detects file modifications
+- **Error Handling:** Comprehensive error reporting
+
+---
 
 ## 🎼 Supported Audio Formats
 
@@ -311,44 +805,7 @@ mXXX-velY-fZZ.wav
 **Output:**
 - WAV (16-bit PCM, professional standard)
 
-## 🔧 Workflow Example
-
-### Complete Session Walkthrough
-
-1. **Create Session**
-   - Name: "DrumKit2024"
-   - Velocity layers: 4
-
-2. **Load Samples**
-   - Input folder: `/samples/kicks/`
-   - Auto-analysis: 12 kick samples detected
-   - Cache: Results stored with MD5 hashes
-
-3. **Review & Correct**
-   - Sample `kick_07.wav` detected as C2 (MIDI 36)
-   - Click pink ♫ button → hear reference C2 tone
-   - Click green ♪ button → hear actual sample
-   - Sample sounds like C#2 → click `+1` transpose button
-   - Verify with pink ♫ button → now plays C#2 reference
-
-4. **Auto-assign Mapping**
-   - Click ⚡ button on C#2 row (MIDI 37)
-   - Algorithm distributes 12 samples across 4 velocity layers
-   - Center-based: finds best RMS match for each layer
-
-5. **Manual Adjustments**
-   - Drag `kick_01.wav` from V0 to V1 (preference)
-   - Left-click matrix cells to preview
-   - Use keyboard `T` to re-sort list
-
-6. **Export**
-   - Set output: `/export/drumkit/`
-   - Press `Ctrl+E`
-   - Generates 24 files (12 samples × 2 sample rates)
-
-7. **Next Session**
-   - Reload session → instant loading (cached)
-   - All mappings and transposes preserved
+---
 
 ## 🛠️ Troubleshooting
 
@@ -361,8 +818,8 @@ pip install sounddevice soundfile
 ```
 
 **Crackling/distortion:**
-- Increase buffer size in audio player settings
 - Check CPU usage
+- Verify audio device configuration
 
 ### Analysis Issues
 
@@ -384,7 +841,7 @@ pip install sounddevice soundfile
 
 **Export fails:**
 - Verify output folder write permissions
-- Check available disk space (samples are copied, not moved)
+- Check available disk space
 - Review error message in dialog
 
 **Wrong naming:**
@@ -399,36 +856,10 @@ pip install sounddevice soundfile
 - Review MD5 hash mismatches in log
 
 **Lost mappings:**
-- Ensure session saved before closing (`Ctrl+S` or auto-save)
+- Sessions auto-save on close
 - Check session file modification time
 
-## 🏗️ Technical Architecture
-
-### Technology Stack
-- **GUI Framework:** PySide6 (Qt6 for Python)
-- **Audio I/O:** sounddevice, soundfile
-- **Audio Analysis:** librosa (spectral analysis)
-- **Pitch Detection:** TensorFlow + CREPE neural network
-- **Session Storage:** JSON with MD5 hashing
-- **Threading:** Multi-threaded analysis, async export
-
-### Architecture Pattern
-- **Clean Architecture:** Domain/Application/Infrastructure layers
-- **Repository Pattern:** Session data persistence
-- **Observer Pattern:** Signal-based UI updates
-- **Factory Pattern:** Audio analyzer creation
-
-### Performance Optimizations
-- **Progressive UI Creation:** QTimer-based incremental loading
-- **Drag Operation Locking:** Race condition prevention
-- **MD5 Caching:** Instant cache validation
-- **Batch Analysis:** Multi-sample processing
-
-### Safety Features
-- **UI Creation Lock:** Prevents drag during progressive loading
-- **Drag Operation Lock:** Prevents rebuild during drag
-- **Session Auto-save:** On close and after major operations
-- **Hash Validation:** Detects file modifications
+---
 
 ## 📊 Project Statistics
 
@@ -437,6 +868,9 @@ pip install sounddevice soundfile
 - **Test Coverage:** Unit tests for core domain logic
 - **Session Format:** JSON (human-readable)
 - **Supported Platforms:** Windows, macOS, Linux
+- **Configuration:** Type-safe centralized config
+
+---
 
 ## 🔮 Future Enhancements
 
@@ -447,6 +881,10 @@ Potential features:
 - [ ] Advanced filtering options
 - [ ] Multi-session management
 - [ ] MIDI file import for mapping templates
+- [ ] VST/AU plugin format export
+- [ ] Advanced waveform visualization
+
+---
 
 ## 📝 License
 
@@ -454,6 +892,13 @@ Professional sample editor for music production workflows.
 
 **Version:** 2.0
 **Framework:** PySide6
+**License:** Pending - See LICENSE file (to be added)
+
+---
+
+## 🤝 Contributing
+
+This is a personal/professional project. For bug reports or feature requests, please open an issue.
 
 ---
 
