@@ -151,6 +151,7 @@ class DragDropSampleList(QGroupBox):
         self.sample_items: List[SampleListItem] = []
         self.current_selected_sample: Optional[SampleMetadata] = None
         self.ui_creation_in_progress = False  # Flag pro bezpečnost při drag operacích
+        self.drag_operation_active = False  # Flag pro aktivní drag operaci
         self.init_ui()
 
     def init_ui(self):
@@ -187,6 +188,11 @@ class DragDropSampleList(QGroupBox):
 
     def _rebuild_list_with_samples(self, samples: List[SampleMetadata]):
         """Rebuild list s danými samples."""
+        # BEZPEČNOST: Blokuj rebuild během aktivní drag operace
+        if self.drag_operation_active:
+            logger.warning("Cannot rebuild sample list - drag operation in progress")
+            return
+
         self.sample_list.clear()
         self.sample_items.clear()
 
@@ -247,6 +253,8 @@ class DragDropSampleList(QGroupBox):
         sample_item_widget.sample_play_requested.connect(self._emit_play_request)
         sample_item_widget.midi_changed.connect(self._on_midi_changed)  # NOVÉ!
         sample_item_widget.sample_disabled_changed.connect(self._on_sample_disabled_changed)
+        sample_item_widget.drag_requested.connect(self._on_drag_started)  # Signál zahájení drag operace
+        sample_item_widget.drag_finished.connect(self._on_drag_finished)  # Signál ukončení drag operace
 
         list_item = QListWidgetItem()
         list_item.setData(Qt.ItemDataRole.UserRole, sample)
@@ -314,6 +322,16 @@ class DragDropSampleList(QGroupBox):
 
         # Propaguj signál výše do parent hierarchy (main window)
         self.midi_changed.emit(sample, old_midi, new_midi)
+
+    def _on_drag_started(self, sample: SampleMetadata):
+        """Handler pro zahájení drag operace."""
+        self.drag_operation_active = True
+        logger.debug(f"Drag operation started: {sample.filename}, blocking rebuilds")
+
+    def _on_drag_finished(self):
+        """Handler pro ukončení drag operace."""
+        self.drag_operation_active = False
+        logger.debug("Drag operation finished, rebuilds allowed")
 
     def _emit_play_request(self, sample: SampleMetadata):
         """Emit play request through parent hierarchy."""

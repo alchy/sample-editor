@@ -26,6 +26,7 @@ class SampleListItem(QWidget):
     midi_changed = Signal(object, int, int)  # sample, old_midi, new_midi
     sample_disabled_changed = Signal(object, bool)  # sample, disabled
     drag_requested = Signal(object)  # sample
+    drag_finished = Signal()  # Signál ukončení drag operace
 
     def __init__(self, sample: SampleMetadata, parent=None):
         super().__init__(parent)
@@ -268,8 +269,13 @@ class SampleListItem(QWidget):
             result = drag.exec(Qt.DropAction.MoveAction)
             logger.debug(f"Drag completed with result: {result}")
 
+            # BEZPEČNOST: Oznámit ukončení drag operace
+            self.drag_finished.emit()
+
         except Exception as e:
             logger.error(f"Drag operation failed: {e}")
+            # BEZPEČNOST: I při chybě oznámit ukončení drag operace
+            self.drag_finished.emit()
 
     def _create_drag_pixmap(self) -> QPixmap:
         """Vytvoří pixmap pro drag operaci."""
