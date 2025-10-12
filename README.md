@@ -1,33 +1,28 @@
-# Sample Editor - Professional Version
+# Simple Sample Editor
 
-Professional sample mapping tool with advanced pitch detection, velocity analysis, and intelligent session management.
+Sample mapping tool with pitch detection, velocity analysis, and intelligent session management.
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-Qt6-green)](https://www.qt.io/)
-[![License](https://img.shields.io/badge/License-Pending-orange)]()
-
-## 🎯 Key Features
+[![License](https://img.shields.io/badge/License-MIT-orange)](...)
 
 ### Core Functionality
-- **🎵 CREPE Pitch Detection** - High-accuracy neural pitch detection (TensorFlow CREPE)
-- **📊 RMS Velocity Analysis** - Intelligent amplitude analysis (500ms window)
-- **🎨 Drag & Drop Interface** - Visual sample mapping with dedicated drag buttons
-- **💾 Session Management** - Project-based workflow with MD5-based caching
-- **📤 Multi-format Export** - Simultaneous export to 44.1kHz and 48kHz
+- CREPE Pitch Detection** - High-accuracy neural pitch detection (TensorFlow CREPE)
+- RMS Velocity Analysis** - Intelligent amplitude analysis (500ms window)
+- Drag & Drop Interface** - Visual sample mapping with dedicated drag buttons
+- Session Management** - Project-based workflow with MD5-based caching
+- Multi-format Export** - Simultaneous export to 44.1kHz and 48kHz
 
-### Advanced Features
-- **⚡ Hash-based Caching** - Lightning-fast project reloading (MD5 validation)
-- **🎹 Full Piano Range** - A0-C8 support (MIDI 21-108)
-- **✏️ Inline MIDI Editor** - Real-time transpose with -12/-1/+1/+12 buttons
-- **🎯 Smart Auto-assign** - Center-based velocity mapping algorithm
-- **🔊 Dual Audio Preview** - Sample playback + reference MIDI tone comparison
-- **🎛️ Configurable Velocity Layers** - 1-8 velocity layers per session
-- **📋 GUI Menu Integration** - All keyboard shortcuts accessible via menu
-- **⚙️ Centralized Configuration** - Type-safe config module for all constants
+### Advanced Functionality
+- Hash-based Caching
+- Smart Auto-assign
+- Configurable Velocity Layers
+- GUI Menu Integration
+- Centralized Configuration
 
 ---
 
-## 📊 Architecture Overview
+## Architecture Overview
 
 ### High-Level System Architecture
 
@@ -328,7 +323,7 @@ sequenceDiagram
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### Requirements
 - **Python:** 3.9–3.12 recommended
@@ -353,7 +348,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Optional Dependencies
+### Dependencies
 
 ```bash
 # For CREPE pitch detection (recommended)
@@ -463,7 +458,7 @@ sample-editor/
 
 ---
 
-## 📖 Quick Start
+## Quick Start
 
 ### 1. Launch Application
 ```bash
@@ -497,7 +492,7 @@ python main.py
 
 ---
 
-## 🎮 Interface Guide
+## Interface Guide
 
 ### Sample List (Left Panel - 40%)
 | Element | Function |
@@ -558,12 +553,12 @@ python main.py
 
 ### Automatic Caching
 Sessions store and cache:
-- ✅ **Pitch Detection Results** - MD5-based sample analysis
-- ✅ **Amplitude Data** - RMS velocity measurements
-- ✅ **MIDI Mappings** - Sample-to-position assignments
-- ✅ **Transposition Changes** - Modified pitch values
-- ✅ **Folder Paths** - Input/output preferences
-- ✅ **Velocity Layer Config** - Session-specific settings
+- **Pitch Detection Results** - MD5-based sample analysis
+- **Amplitude Data** - RMS velocity measurements
+- **MIDI Mappings** - Sample-to-position assignments
+- **Transposition Changes** - Modified pitch values
+- **Folder Paths** - Input/output preferences
+- **Velocity Layer Config** - Session-specific settings
 
 ### Session File Structure
 `sessions/session-name.json`:
@@ -592,17 +587,9 @@ Sessions store and cache:
 }
 ```
 
-### Cache Benefits
-- 🚀 **Instant Loading:** Previously analyzed samples load in milliseconds
-- 💡 **Smart Updates:** Only re-analyzes changed files (MD5 validation)
-- 🔒 **Data Persistence:** All edits and transposes saved automatically
-- 📊 **Session Stats:** Track cached vs newly analyzed samples
-
 ---
 
-## 📦 Export Format
-
-### Naming Convention
+### Sample Export = Naming Convention
 ```
 mXXX-velY-fZZ.wav
 ```
@@ -619,12 +606,10 @@ mXXX-velY-fZZ.wav
 - **Format:** 16-bit PCM WAV
 - **Sample Rates:** 44.1kHz and 48kHz (simultaneous)
 - **Channels:** Mono or Stereo (preserves source)
-- **Processing:** High-quality resampling (kaiser_best)
-- **Validation:** Pre-export validation with error reporting
 
 ---
 
-## 🔧 Configuration System
+## Configuration System
 
 The application uses a centralized configuration module for type-safe access to all constants:
 
@@ -697,7 +682,7 @@ session_folder = APP.Paths.SESSIONS_FOLDER
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Run Tests
 
@@ -730,68 +715,6 @@ tests/
 
 ---
 
-## 🛠️ Development
-
-### Code Style
-
-```bash
-# Format code
-black .
-
-# Lint
-flake8
-
-# Type checking
-mypy .
-```
-
-### Project Commands
-
-```bash
-# Run application
-python main.py
-
-# Run tests
-pytest
-
-# Install dev dependencies
-pip install -r requirements-dev.txt
-```
-
----
-
-## 🏗️ Technical Architecture
-
-### Technology Stack
-- **GUI Framework:** PySide6 (Qt6 for Python)
-- **Audio I/O:** sounddevice, soundfile
-- **Audio Analysis:** librosa (spectral analysis)
-- **Pitch Detection:** TensorFlow + CREPE neural network
-- **Session Storage:** JSON with MD5 hashing
-- **Threading:** Multi-threaded analysis, async export
-- **Configuration:** Type-safe centralized config module
-
-### Architecture Pattern
-- **Clean Architecture:** Domain/Application/Infrastructure layers (in progress)
-- **Repository Pattern:** Session data persistence
-- **Observer Pattern:** Signal-based UI updates (Qt signals)
-- **Worker Pattern:** Background audio processing
-- **Factory Pattern:** Audio analyzer creation
-
-### Performance Optimizations
-- **Progressive UI Creation:** QTimer-based incremental loading
-- **Drag Operation Locking:** Race condition prevention
-- **MD5 Caching:** Instant cache validation
-- **Batch Analysis:** Multi-sample processing
-- **Worker Threads:** Non-blocking audio playback
-
-### Safety Features
-- **UI Creation Lock:** Prevents drag during progressive loading
-- **Drag Operation Lock:** Prevents rebuild during drag
-- **Session Auto-save:** On close and after major operations
-- **Hash Validation:** Detects file modifications
-- **Error Handling:** Comprehensive error reporting
-
 ---
 
 ## 🎼 Supported Audio Formats
@@ -803,76 +726,11 @@ pip install -r requirements-dev.txt
 - MP3 (via librosa)
 
 **Output:**
-- WAV (16-bit PCM, professional standard)
+- WAV (16-bit PCM standard)
 
 ---
 
-## 🛠️ Troubleshooting
-
-### Audio Issues
-
-**No playback:**
-```bash
-pip install sounddevice soundfile
-# Check system audio settings
-```
-
-**Crackling/distortion:**
-- Check CPU usage
-- Verify audio device configuration
-
-### Analysis Issues
-
-**Slow first run:**
-- Normal: CREPE model loading (~30 seconds)
-- Subsequent analyses use cache
-
-**Wrong pitch detection:**
-- Use transpose buttons (-12/-1/+1/+12)
-- Compare with pink ♫ reference tone
-- Session saves corrections automatically
-
-**Missing samples:**
-- Check input folder path
-- Verify audio format support
-- Review console logs
-
-### Export Issues
-
-**Export fails:**
-- Verify output folder write permissions
-- Check available disk space
-- Review error message in dialog
-
-**Wrong naming:**
-- Check MIDI note assignments in matrix
-- Verify velocity layer configuration
-
-### Session Issues
-
-**Cache not loading:**
-- Check `sessions/` folder exists
-- Verify JSON file not corrupted
-- Review MD5 hash mismatches in log
-
-**Lost mappings:**
-- Sessions auto-save on close
-- Check session file modification time
-
----
-
-## 📊 Project Statistics
-
-- **Lines of Code:** ~8,000+
-- **Modules:** 20+ Python files
-- **Test Coverage:** Unit tests for core domain logic
-- **Session Format:** JSON (human-readable)
-- **Supported Platforms:** Windows, macOS, Linux
-- **Configuration:** Type-safe centralized config
-
----
-
-## 🔮 Future Enhancements
+## Future Enhancements
 
 Potential features:
 - [ ] Real-time pitch shifting on export
@@ -886,20 +744,16 @@ Potential features:
 
 ---
 
-## 📝 License
+## License
 
 Professional sample editor for music production workflows.
 
 **Version:** 2.0
 **Framework:** PySide6
-**License:** Pending - See LICENSE file (to be added)
+**License:** MIT
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-This is a personal/professional project. For bug reports or feature requests, please open an issue.
-
----
-
-**Tip:** Press `F1` in the application for quick help, or check the `Help → About` menu for version info.
+This is a personal project. For bug reports or feature requests, please open an issue.
