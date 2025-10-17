@@ -618,6 +618,7 @@ class MainWindow(QMainWindow):
         self.analyzer.progress_updated.connect(self.status_panel.update_progress)
         self.analyzer.sample_analyzed.connect(self._on_sample_analyzed)  # NOVÝ signál!
         self.analyzer.analysis_completed.connect(self._on_analysis_completed)
+        self.analyzer.analysis_error.connect(self._on_analysis_error)  # NOVÝ signál pro chyby!
         self.analyzer.start()
 
     def _on_sample_analyzed(self, sample: SampleMetadata, range_info: dict):
@@ -636,6 +637,25 @@ class MainWindow(QMainWindow):
             self.sample_list.update_samples(self.samples)
             logger.debug(f"UI updated with {len(self.samples)} samples")
 
+    def _on_analysis_error(self, error_message: str):
+        """
+        NOVÝ HANDLER: Zobrazí detailní chybovou zprávu při selhání analýzy.
+
+        Args:
+            error_message: Detailní popis chyby s diagnostikou
+        """
+        self.status_panel.hide_progress()
+        self.status_panel.update_status("❌ Analysis failed - see details below")
+
+        # Zobraz detailní error dialog
+        QMessageBox.critical(
+            self,
+            "Analysis Failed",
+            error_message
+        )
+
+        logger.error(f"Analysis error displayed to user: {error_message}")
+
     def _on_analysis_completed(self, samples: List[SampleMetadata], range_info: dict):
         """Handler pro dokončení analýzy."""
         # Samples už jsou přidány průběžně v _on_sample_analyzed
@@ -646,6 +666,8 @@ class MainWindow(QMainWindow):
         self.status_panel.hide_progress()
 
         if not self.samples:
+            # Pokud není error message (už byl zobrazen přes _on_analysis_error),
+            # zobraz obecnou zprávu
             self.status_panel.update_status("No valid samples found")
             return
 

@@ -350,13 +350,22 @@ pip install -r requirements.txt
 
 ### Dependencies
 
-```bash
-# For CREPE pitch detection (recommended)
-pip install crepe tensorflow
+All dependencies are listed in `requirements.txt` and include:
 
-# For enhanced audio support
-pip install librosa
+```bash
+# Install all dependencies
+pip install -r requirements.txt
+
+# Key dependencies:
+# - PySide6: GUI framework
+# - crepe + tensorflow: CREPE pitch detection (required)
+# - librosa: Audio processing
+# - soundfile, sounddevice: Audio I/O
+# - mido, python-rtmidi: MIDI support
+# - pytest, pytest-qt: Testing framework
 ```
+
+**Note:** TensorFlow is required for CREPE pitch detection. If analysis fails with "No module named 'tensorflow'", ensure all dependencies are installed via `pip install -r requirements.txt`.
 
 ### Launch Application
 

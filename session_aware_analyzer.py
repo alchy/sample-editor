@@ -94,6 +94,9 @@ class SessionAwareBatchAnalyzer(QThread):
     # NOVÝ signál pro průběžné přidávání samples
     sample_analyzed = Signal(object, dict)  # sample, current_range_info
 
+    # NOVÝ signál pro detailní diagnostiku chyb
+    analysis_error = Signal(str)  # error_message with details
+
     def __init__(self, input_folder: Path, session_manager):
         """
         Args:
@@ -195,6 +198,8 @@ class SessionAwareBatchAnalyzer(QThread):
 
             total_samples = len(samples_to_analyze)
             analyzed_samples = []
+            failed_count = 0
+            first_error = None
 
             for i, sample in enumerate(samples_to_analyze):
                 if self._stop_requested:
@@ -221,11 +226,46 @@ class SessionAwareBatchAnalyzer(QThread):
                         self.sample_analyzed.emit(sample, current_range_info)
                         logger.debug(f"Emitted newly analyzed sample: {sample.filename}")
                     else:
+                        failed_count += 1
                         logger.warning(f"Failed to analyze {sample.filename}")
 
                 except Exception as e:
+                    failed_count += 1
+                    if first_error is None:
+                        first_error = str(e)
                     logger.error(f"Failed to analyze {sample.filepath}: {e}")
                     continue
+
+            # Pokud selhaly všechny samples, emituj detailní chybovou zprávu
+            if failed_count == total_samples and total_samples > 0:
+                error_msg = f"❌ Analysis failed for all {total_samples} samples.\n\n"
+
+                if first_error:
+                    # Detekce chybějících modulů
+                    if "No module named 'tensorflow'" in first_error:
+                        error_msg += "**Missing dependency: TensorFlow**\n\n"
+                        error_msg += "CREPE pitch detection requires TensorFlow.\n"
+                        error_msg += "Please install it:\n"
+                        error_msg += "  pip install tensorflow\n\n"
+                        error_msg += "Or reinstall dependencies:\n"
+                        error_msg += "  pip install -r requirements.txt"
+                    elif "No module named" in first_error:
+                        module_name = first_error.split("'")[1] if "'" in first_error else "unknown"
+                        error_msg += f"**Missing dependency: {module_name}**\n\n"
+                        error_msg += f"Please install the missing module:\n"
+                        error_msg += f"  pip install {module_name}\n\n"
+                        error_msg += "Or reinstall all dependencies:\n"
+                        error_msg += "  pip install -r requirements.txt"
+                    else:
+                        error_msg += f"**Error details:**\n{first_error}\n\n"
+                        error_msg += "Check the console log for more details."
+                else:
+                    error_msg += "Check the console log for details."
+
+                logger.error(error_msg)
+                self.analysis_error.emit(error_msg)
+            elif failed_count > 0:
+                logger.warning(f"Analysis completed with {failed_count}/{total_samples} failures")
 
             # Cache the newly analyzed samples pomocí SessionService
             if analyzed_samples:
@@ -292,11 +332,15 @@ class SessionAwareBatchAnalyzer(QThread):
         """Najde unikátní audio soubory bez duplicit."""
         audio_files_set: Set[Path] = set()
 
+        logger.info(f"Searching for audio files in: {self.input_folder}")
+        logger.info(f"Input folder exists: {self.input_folder.exists()}")
+        logger.info(f"Input folder is dir: {self.input_folder.is_dir()}")
+
         try:
             for ext in self.supported_extensions:
                 found_files = list(self.input_folder.glob(ext))
                 audio_files_set.update(found_files)
-                logger.debug(f"Extension {ext}: found {len(found_files)} files")
+                logger.info(f"Extension {ext}: found {len(found_files)} files")
 
             # Convert back to sorted list
             audio_files = sorted(list(audio_files_set))
@@ -305,7 +349,7 @@ class SessionAwareBatchAnalyzer(QThread):
             return audio_files
 
         except Exception as e:
-            logger.error(f"Error finding audio files in {self.input_folder}: {e}")
+            logger.error(f"Error finding audio files in {self.input_folder}: {e}", exc_info=True)
             return []
 
     def stop_analysis(self):

@@ -43,25 +43,31 @@ class SessionService:
         """Analyzuje samples s pouzitim cache."""
         cached = []
         to_analyze = []
-        
+
+        logger.info(f"analyze_with_cache: Processing {len(samples)} samples")
+
         for sample in samples:
             try:
                 if not sample.filepath.exists():
+                    logger.warning(f"Sample filepath does not exist: {sample.filepath}")
                     continue
-                    
+
                 file_hash = self.cache.calculate_file_hash(sample.filepath)
                 cached_data = self.cache.get_cached_analysis(file_hash)
-                
+
                 if cached_data:
                     self._restore_sample_from_cache(sample, cached_data, file_hash)
                     cached.append(sample)
+                    logger.debug(f"Loaded from cache: {sample.filename}")
                 else:
                     sample._hash = file_hash
                     to_analyze.append(sample)
+                    logger.debug(f"To analyze: {sample.filename}")
             except Exception as e:
-                logger.error(f"Error processing {sample.filename}: {e}")
+                logger.error(f"Error processing {sample.filename}: {e}", exc_info=True)
                 to_analyze.append(sample)
-                
+
+        logger.info(f"analyze_with_cache result: {len(cached)} cached, {len(to_analyze)} to analyze")
         return cached, to_analyze
         
     def cache_analyzed_samples(self, samples: List[SampleMetadata]):
