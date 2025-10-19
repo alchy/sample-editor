@@ -256,6 +256,7 @@ class Texts:
     SAMPLE_LIST_NO_SAMPLES = "No samples loaded"
     SAMPLE_LIST_STATS_PREFIX = "Total:"
     SAMPLE_LIST_STATS_SUFFIX = "samples"
+    SAMPLE_LIST_STATS_TEMPLATE = "Loaded {total} samples | Pitch: {pitch} | RMS: {rms} | Filtered: {filtered} | Mapped: {mapped} | Keys: SPACE/S/D/ESC/T"
 
     # Audio player
     AUDIO_PLAYER_TITLE = "Audio Player"
@@ -315,7 +316,7 @@ class Texts:
     # Use dynamic formatting: f"...({AUDIO.Velocity.MIN_LAYERS}-{AUDIO.Velocity.MAX_LAYERS})"
 
     # Icons and symbols
-    ICON_DRAG = "⇄ Drag"  # Bidirectional arrows with text for drag & drop
+    ICON_DRAG = "⚡ Drag"  # Lightning bolt (same as assign) with text for drag & drop
     ICON_PLAY_SAMPLE = "♪"
     ICON_PLAY_MIDI = "♫"
     ICON_RESET = "⌫"

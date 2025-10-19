@@ -168,21 +168,21 @@ class SampleListItem(QWidget):
 
         drag_btn.setStyleSheet("""
             QPushButton {
-                background-color: #2196F3;
+                background-color: #ff9800;
                 color: white;
                 font-weight: bold;
                 border-radius: 4px;
                 border: none;
-                font-size: 14px;
+                font-size: 12px;
                 letter-spacing: 0px;
                 padding: 4px 8px;
             }
             QPushButton:hover {
-                background-color: #1976D2;
+                background-color: #f57c00;
                 cursor: move;
             }
             QPushButton:pressed {
-                background-color: #0D47A1;
+                background-color: #ef6c00;
             }
             QPushButton:disabled {
                 background-color: #cccccc;

@@ -10,6 +10,7 @@ from PySide6.QtGui import QKeyEvent
 
 from models import SampleMetadata
 from inline_midi_editor import SampleListItem
+from config import GUI
 import logging
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,7 @@ class DragDropSampleList(QGroupBox):
         self.sample_items.clear()
 
         if not samples:
-            self.info_label.setText("Žádné samples načteny")
+            self.info_label.setText(GUI.Texts.SAMPLE_LIST_NO_SAMPLES)
             return
 
         # Statistiky
@@ -208,10 +209,15 @@ class DragDropSampleList(QGroupBox):
         mapped_count = sum(1 for s in samples if s.mapped)
 
         self.info_label.setText(
-            f"Načteno {total_count} samples | Pitch: {pitch_detected} | RMS: {rms_detected} | "
-            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZNÍK/S/D/ESC/T"
+            GUI.Texts.SAMPLE_LIST_STATS_TEMPLATE.format(
+                total=total_count,
+                pitch=pitch_detected,
+                rms=rms_detected,
+                filtered=filtered_count,
+                mapped=mapped_count
+            )
         )
-        self.info_label.setStyleSheet("color: #666; font-size: 14px; font-weight: bold;")
+        self.info_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
 
         # Postupné vytváření items
         self._create_items_progressively(samples)
@@ -280,8 +286,13 @@ class DragDropSampleList(QGroupBox):
         mapped_count = sum(1 for s in self.samples if s.mapped)
 
         self.info_label.setText(
-            f"Načteno {total_count} samples | Pitch: {pitch_detected} | RMS: {rms_detected} | "
-            f"Filtrováno: {filtered_count} | Namapováno: {mapped_count} | Klávesy: MEZNÍK/S/D/ESC/T | DRAG TLAČÍTKA AKTIVNÍ"
+            GUI.Texts.SAMPLE_LIST_STATS_TEMPLATE.format(
+                total=total_count,
+                pitch=pitch_detected,
+                rms=rms_detected,
+                filtered=filtered_count,
+                mapped=mapped_count
+            )
         )
 
         self.samples_loaded.emit()
