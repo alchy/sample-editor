@@ -87,6 +87,20 @@ class ExportThread(QThread):
                     # Neukončuj export kvůli chybě v JSON - pouze loguj
                     export_info['instrument_definition_error'] = str(e)
 
+            # Export samples-report.txt
+            if self.session_manager:
+                try:
+                    self.progress_updated.emit(97, "Creating samples-report.txt...")
+
+                    velocity_layers = self.session_manager.get_velocity_layers()
+                    report_path = self._generate_samples_report(velocity_layers)
+                    export_info['samples_report_path'] = str(report_path)
+                    logger.info(f"Samples report created: {report_path}")
+
+                except Exception as e:
+                    logger.error(f"Failed to create samples report: {e}")
+                    export_info['samples_report_error'] = str(e)
+
             # Dokončení
             self.progress_updated.emit(100, f"Export dokončen: {export_info['exported_count']} samples")
             self.export_completed.emit(export_info)
@@ -150,6 +164,122 @@ class ExportThread(QThread):
 
         export_info['total_files'] = len(export_info['exported_files'])
         return export_info
+
+    def _generate_samples_report(self, velocity_layers: int) -> Path:
+        """
+        Generate samples-report.txt with coverage analysis.
+        Shows assigned samples count and missing notes sorted by gap count.
+        Analyzes only the actual range of notes that have samples assigned.
+        """
+        from collections import defaultdict
+
+        # Determine actual MIDI range from mapped samples
+        if not self.mapping:
+            # No samples mapped - use full piano range as fallback
+            actual_min_midi = 21
+            actual_max_midi = 108
+        else:
+            mapped_midis = [key[0] for key in self.mapping.keys()]
+            actual_min_midi = min(mapped_midis)
+            actual_max_midi = max(mapped_midis)
+
+        # Analyze coverage for each MIDI note in the actual range
+        coverage = defaultdict(lambda: {'assigned': 0, 'missing': 0, 'layers': []})
+
+        for midi_note in range(actual_min_midi, actual_max_midi + 1):
+            for velocity in range(velocity_layers):
+                key = (midi_note, velocity)
+                if key in self.mapping:
+                    coverage[midi_note]['assigned'] += 1
+                    coverage[midi_note]['layers'].append(velocity)
+                else:
+                    coverage[midi_note]['missing'] += 1
+
+        # Calculate statistics
+        total_notes = actual_max_midi - actual_min_midi + 1
+        total_possible_samples = total_notes * velocity_layers
+        total_assigned = sum(c['assigned'] for c in coverage.values())
+        total_missing = total_possible_samples - total_assigned
+
+        # Find notes with missing samples
+        notes_with_gaps = []
+        for midi_note in range(actual_min_midi, actual_max_midi + 1):
+            if coverage[midi_note]['missing'] > 0:
+                note_name = MidiUtils.midi_to_note_name(midi_note)
+                notes_with_gaps.append({
+                    'midi': midi_note,
+                    'note': note_name,
+                    'missing': coverage[midi_note]['missing'],
+                    'assigned': coverage[midi_note]['assigned'],
+                    'layers': coverage[midi_note]['layers']
+                })
+
+        # Sort by number of missing samples (descending)
+        notes_with_gaps.sort(key=lambda x: x['missing'], reverse=True)
+
+        # Generate report
+        report_lines = []
+        report_lines.append("=" * 80)
+        report_lines.append("SAMPLE COVERAGE REPORT")
+        report_lines.append("=" * 80)
+        report_lines.append("")
+        report_lines.append(f"Velocity Layers: {velocity_layers}")
+        report_lines.append(f"Instrument Range: {MidiUtils.midi_to_note_name(actual_min_midi)} (MIDI {actual_min_midi}) - {MidiUtils.midi_to_note_name(actual_max_midi)} (MIDI {actual_max_midi})")
+        report_lines.append(f"Total Notes in Range: {total_notes}")
+        report_lines.append("")
+        report_lines.append("-" * 80)
+        report_lines.append("SUMMARY")
+        report_lines.append("-" * 80)
+        report_lines.append(f"Total Possible Samples: {total_possible_samples} ({total_notes} notes × {velocity_layers} layers)")
+        report_lines.append(f"Assigned Samples:       {total_assigned}")
+        report_lines.append(f"Missing Samples:        {total_missing}")
+        report_lines.append(f"Coverage:               {(total_assigned / total_possible_samples * 100):.1f}%")
+        report_lines.append("")
+
+        if notes_with_gaps:
+            report_lines.append("-" * 80)
+            report_lines.append(f"MISSING SAMPLES ({len(notes_with_gaps)} notes with gaps)")
+            report_lines.append("-" * 80)
+            report_lines.append(f"{'Note':<8} {'MIDI':<6} {'Missing':<10} {'Assigned':<10} {'Layers'}")
+            report_lines.append("-" * 80)
+
+            for note_info in notes_with_gaps:
+                layers_str = ', '.join(map(str, note_info['layers'])) if note_info['layers'] else "none"
+                report_lines.append(
+                    f"{note_info['note']:<8} {note_info['midi']:<6} "
+                    f"{note_info['missing']:<10} {note_info['assigned']:<10} {layers_str}"
+                )
+        else:
+            report_lines.append("-" * 80)
+            report_lines.append("✓ FULL COVERAGE - All notes have all velocity layers assigned!")
+            report_lines.append("-" * 80)
+
+        report_lines.append("")
+        report_lines.append("=" * 80)
+        report_lines.append("NOTES TO SAMPLE (prioritized by gap count)")
+        report_lines.append("=" * 80)
+
+        if notes_with_gaps:
+            # Group by missing count
+            by_missing_count = defaultdict(list)
+            for note_info in notes_with_gaps:
+                by_missing_count[note_info['missing']].append(note_info['note'])
+
+            for missing_count in sorted(by_missing_count.keys(), reverse=True):
+                notes_list = ', '.join(by_missing_count[missing_count])
+                report_lines.append(f"\n{missing_count} layer(s) missing: {notes_list}")
+        else:
+            report_lines.append("\nNo samples needed - full coverage achieved!")
+
+        report_lines.append("")
+        report_lines.append("=" * 80)
+
+        # Write report to file
+        report_path = self.output_folder / "samples-report.txt"
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(report_lines))
+
+        return report_path
 
     def cancel_export(self):
         """Zruší probíhající export."""

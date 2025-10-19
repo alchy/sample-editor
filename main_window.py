@@ -16,6 +16,7 @@ from config import GUI
 from models import SampleMetadata
 from export_utils import ExportManager
 from export_thread import ExportThread
+from auto_assign_thread import AutoAssignWorker
 from session_manager import SessionManager
 from session_dialog import SessionDialog
 from session_aware_analyzer import SessionAwareBatchAnalyzer
@@ -153,6 +154,7 @@ class MainWindow(QMainWindow):
         self.samples = []
         self.export_manager = None
         self.export_thread = None
+        self.auto_assign_thread = None
         self.session_manager = SessionManager()
         self.input_folder = None
         self.output_folder = None
@@ -532,37 +534,27 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        # Zobraz progress
-        self.status_panel.show_progress()
-        self.status_panel.update_progress(0, "Starting auto-assign for all notes...")
+        # Spusť asynchronní auto-assign pomocí worker thread
+        try:
+            self.auto_assign_thread = AutoAssignWorker(
+                mapping_matrix=self.mapping_matrix,
+                samples=self.samples,
+                piano_min=self.mapping_matrix.piano_min_midi,
+                piano_max=self.mapping_matrix.piano_max_midi
+            )
 
-        # Force process events pro zobrazení progress baru
-        from PySide6.QtCore import QCoreApplication
-        QCoreApplication.processEvents()
+            # Připoj signály
+            self.auto_assign_thread.progress_updated.connect(self.status_panel.update_progress)
+            self.auto_assign_thread.assign_completed.connect(self._on_assign_completed)
+            self.auto_assign_thread.assign_failed.connect(self._on_assign_failed)
 
-        # Proveď auto-assign s progress updatem
-        stats = self._auto_assign_with_progress()
+            # Zobraz progress a spusť thread
+            self.control_panel.set_export_mode(True)  # Disable buttons during operation
+            self.status_panel.show_progress()
+            self.auto_assign_thread.start()
 
-        # Skryj progress a zobraz výsledky
-        self.status_panel.hide_progress()
-
-        # Refresh display
-        self.sample_list.refresh_display()
-        self._save_session_state()
-
-        # Zobraz výsledky
-        QMessageBox.information(
-            self,
-            "Assign All Completed",
-            f"Auto-assign completed!\n\n"
-            f"Processed notes: {stats['total_notes']}\n"
-            f"Notes with assignments: {stats['assigned_notes']}\n"
-            f"Total samples assigned: {stats['total_samples']}"
-        )
-
-        self.statusBar().showMessage(
-            f"Assign All: {stats['total_samples']} samples assigned to {stats['assigned_notes']} notes"
-        )
+        except Exception as e:
+            QMessageBox.critical(self, "Auto-Assign Error", f"Cannot start auto-assign:\n{e}")
 
     def _auto_assign_with_progress(self) -> dict:
         """Provede auto-assign s progress barem - postupuje od nejvyšší noty k nejnižší."""
@@ -893,6 +885,36 @@ class MainWindow(QMainWindow):
         self.status_panel.update_status("Export failed")
         QMessageBox.critical(self, "Export Error", f"Export failed:\n\n{error_message}")
 
+    def _on_assign_completed(self, stats: dict):
+        """Handler for completed auto-assign operation."""
+        self.control_panel.set_export_mode(False)
+        self.status_panel.hide_progress()
+
+        # Refresh display
+        self.sample_list.refresh_display()
+        self._save_session_state()
+
+        # Show results
+        QMessageBox.information(
+            self,
+            "Assign All Completed",
+            f"Auto-assign completed!\n\n"
+            f"Processed notes: {stats['total_notes']}\n"
+            f"Notes with assignments: {stats['assigned_notes']}\n"
+            f"Total samples assigned: {stats['total_samples']}"
+        )
+
+        self.statusBar().showMessage(
+            f"Assign All: {stats['total_samples']} samples assigned to {stats['assigned_notes']} notes"
+        )
+
+    def _on_assign_failed(self, error_message: str):
+        """Handler for failed auto-assign operation."""
+        self.control_panel.set_export_mode(False)
+        self.status_panel.hide_progress()
+        self.status_panel.update_status("Auto-assign failed")
+        QMessageBox.critical(self, "Auto-Assign Error", f"Auto-assign failed:\n\n{error_message}")
+
     def _on_sample_selected(self, sample: SampleMetadata):
         """Handler pro výběr sample."""
         self.mapping_matrix.highlight_sample_in_matrix(sample)
@@ -980,6 +1002,10 @@ class MainWindow(QMainWindow):
 
         if self.export_thread and self.export_thread.isRunning():
             self.cancel_export()
+
+        if self.auto_assign_thread and self.auto_assign_thread.isRunning():
+            self.auto_assign_thread.cancel_assign()
+            self.auto_assign_thread.wait(3000)
 
         if self.audio_player:
             self.audio_player.cleanup()
