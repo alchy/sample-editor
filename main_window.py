@@ -357,17 +357,17 @@ class MainWindow(QMainWindow):
 
         # Pravý sloupec: Mapping matrix + Audio player
         right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(2, 2, 2, 2)
+        self.right_layout = QVBoxLayout(right_widget)  # Uložit referenci pro možnost reinicializace
+        self.right_layout.setContentsMargins(2, 2, 2, 2)
 
         # Získej velocity_layers ze session
         velocity_layers = self.session_manager.get_velocity_layers()
         self.mapping_matrix = DragDropMappingMatrix(velocity_layers=velocity_layers)
         self.mapping_matrix.setMinimumWidth(800)
-        right_layout.addWidget(self.mapping_matrix)
+        self.right_layout.addWidget(self.mapping_matrix)
 
         # Audio player
-        right_layout.addWidget(self.audio_player)
+        self.right_layout.addWidget(self.audio_player)
 
         splitter.addWidget(right_widget)
 
@@ -402,18 +402,77 @@ class MainWindow(QMainWindow):
         self.sample_list.sample_selected.connect(self.audio_player.set_current_sample)
 
     # Menu action handlers
+    def _reinitialize_mapping_matrix(self):
+        """Reinicializuje mapping matrix s novým počtem velocity layerů."""
+        # Získej nový počet layerů z aktuální session
+        new_velocity_layers = self.session_manager.get_velocity_layers()
+
+        # Odpoj signály staré matrix
+        try:
+            self.mapping_matrix.sample_selected_in_matrix.disconnect()
+            self.mapping_matrix.sample_mapped.disconnect()
+            self.mapping_matrix.sample_unmapped.disconnect()
+            self.mapping_matrix.sample_moved.disconnect()
+            self.mapping_matrix.sample_play_requested.disconnect()
+            self.mapping_matrix.midi_note_play_requested.disconnect()
+        except Exception as e:
+            logger.warning(f"Error disconnecting matrix signals: {e}")
+
+        # Odeber starou matrix z layoutu
+        self.right_layout.removeWidget(self.mapping_matrix)
+        self.mapping_matrix.deleteLater()
+
+        # Vytvoř novou matrix s novým počtem layerů
+        self.mapping_matrix = DragDropMappingMatrix(velocity_layers=new_velocity_layers)
+        self.mapping_matrix.setMinimumWidth(800)
+
+        # Vlož novou matrix na správné místo (před audio player)
+        self.right_layout.insertWidget(0, self.mapping_matrix)
+
+        # Připoj signály nové matrix
+        self.mapping_matrix.sample_selected_in_matrix.connect(self.sample_list.highlight_sample_in_list)
+        self.mapping_matrix.sample_mapped.connect(self._on_sample_mapped)
+        self.mapping_matrix.sample_unmapped.connect(self._on_sample_unmapped)
+        self.mapping_matrix.sample_moved.connect(self._on_sample_moved)
+        self.mapping_matrix.sample_play_requested.connect(self.safe_play_sample)
+        self.mapping_matrix.midi_note_play_requested.connect(self.audio_player.play_midi_tone)
+
+        logger.info(f"Mapping matrix reinitialized with {new_velocity_layers} velocity layers")
+
     def _new_session(self):
         """Vytvoří novou session."""
+        logger.info("=== NEW SESSION requested ===")
+
         if self.session_manager.session_data:
             self._save_session_state()
 
         self.session_manager.close_session()
 
-        if self._show_session_dialog():
-            self.samples = []
-            self.sample_list.update_samples([])
-            self.mapping_matrix.clear_matrix()
-            self._restore_session_state()
+        # Zobraz session dialog a zapamatuj si referenci pro kontrolu
+        session_dialog = SessionDialog(self.session_manager, self)
+        if session_dialog.exec() == SessionDialog.DialogCode.Accepted:
+            session_name = session_dialog.get_selected_session()
+            if session_name:
+                logger.info(f"Session selected/created: {session_name}")
+
+                self.samples = []
+                self.sample_list.update_samples([])
+
+                # Zjisti počet layerů v nové session
+                new_velocity_layers = self.session_manager.get_velocity_layers()
+                current_velocity_layers = self.mapping_matrix.velocity_layers
+
+                # DŮLEŽITÉ: Reinicializuj matrix pokud se změnil počet layerů
+                if new_velocity_layers != current_velocity_layers:
+                    logger.info(f"Velocity layers changed ({current_velocity_layers} -> {new_velocity_layers}) - reinitializing mapping matrix")
+                    self._reinitialize_mapping_matrix()
+                else:
+                    logger.info(f"Same velocity layers ({current_velocity_layers}) - just clearing matrix")
+                    self.mapping_matrix.clear_matrix()
+
+                self._restore_session_state()
+        else:
+            logger.info("Session dialog cancelled")
 
     def _select_input_folder(self):
         """Výběr vstupní složky."""
