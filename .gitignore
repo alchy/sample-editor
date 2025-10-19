@@ -50,3 +50,6 @@ __old__/
 build/
 dist/
 *.egg-info/
+*.spec~
+releases/
+installers/
