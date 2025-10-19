@@ -328,9 +328,18 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         """Inicializace hlavního UI."""
+        from config import GUI
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(
+            GUI.Spacing.MARGIN_MEDIUM,
+            GUI.Spacing.MARGIN_MEDIUM,
+            GUI.Spacing.MARGIN_MEDIUM,
+            GUI.Spacing.MARGIN_MEDIUM
+        )
+        main_layout.setSpacing(GUI.Spacing.SPACING_TINY)
 
         # Zjednodušený control panel
         self.control_panel = ControlPanel()
@@ -342,15 +351,18 @@ class MainWindow(QMainWindow):
 
         # Splitter pro levý a pravý sloupec
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(1)  # Minimální šířka handle mezi panely
+        splitter.setChildrenCollapsible(False)  # Zabránit kolapsu panelů
 
         # Levý sloupec: Sample list
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
-        left_layout.setContentsMargins(2, 2, 2, 2)
+        left_layout.setContentsMargins(0, 0, 0, 0)  # Žádné margins pro maximální prostor
+        left_layout.setSpacing(0)
 
         self.sample_list = DragDropSampleList()
-        self.sample_list.setMinimumWidth(300)
-        self.sample_list.setMaximumWidth(600)
+        self.sample_list.setMinimumWidth(GUI.Dimensions.SAMPLE_LIST_MIN_WIDTH)
+        self.sample_list.setMaximumWidth(GUI.Dimensions.SAMPLE_LIST_MAX_WIDTH)
         left_layout.addWidget(self.sample_list)
 
         splitter.addWidget(left_widget)
@@ -358,12 +370,13 @@ class MainWindow(QMainWindow):
         # Pravý sloupec: Mapping matrix + Audio player
         right_widget = QWidget()
         self.right_layout = QVBoxLayout(right_widget)  # Uložit referenci pro možnost reinicializace
-        self.right_layout.setContentsMargins(2, 2, 2, 2)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)  # Žádné margins pro maximální prostor
+        self.right_layout.setSpacing(GUI.Spacing.SPACING_TINY)
 
         # Získej velocity_layers ze session
         velocity_layers = self.session_manager.get_velocity_layers()
         self.mapping_matrix = DragDropMappingMatrix(velocity_layers=velocity_layers)
-        self.mapping_matrix.setMinimumWidth(800)
+        self.mapping_matrix.setMinimumWidth(GUI.Dimensions.MATRIX_MIN_WIDTH)
         self.right_layout.addWidget(self.mapping_matrix)
 
         # Audio player
@@ -372,9 +385,9 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right_widget)
 
         # 40/60 rozložení (samples 40%, matice 60%)
-        splitter.setSizes([640, 960])
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 6)
+        splitter.setSizes([GUI.Dimensions.SPLITTER_LEFT_SIZE, GUI.Dimensions.SPLITTER_RIGHT_SIZE])
+        splitter.setStretchFactor(0, GUI.Dimensions.SPLITTER_LEFT_FACTOR)
+        splitter.setStretchFactor(1, GUI.Dimensions.SPLITTER_RIGHT_FACTOR)
 
         main_layout.addWidget(splitter)
 
@@ -404,6 +417,8 @@ class MainWindow(QMainWindow):
     # Menu action handlers
     def _reinitialize_mapping_matrix(self):
         """Reinicializuje mapping matrix s novým počtem velocity layerů."""
+        from config import GUI
+
         # Získej nový počet layerů z aktuální session
         new_velocity_layers = self.session_manager.get_velocity_layers()
 
@@ -424,7 +439,7 @@ class MainWindow(QMainWindow):
 
         # Vytvoř novou matrix s novým počtem layerů
         self.mapping_matrix = DragDropMappingMatrix(velocity_layers=new_velocity_layers)
-        self.mapping_matrix.setMinimumWidth(800)
+        self.mapping_matrix.setMinimumWidth(GUI.Dimensions.MATRIX_MIN_WIDTH)
 
         # Vlož novou matrix na správné místo (před audio player)
         self.right_layout.insertWidget(0, self.mapping_matrix)
