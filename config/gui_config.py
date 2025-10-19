@@ -191,9 +191,9 @@ class Fonts:
 # =============================================================================
 
 class Texts:
-    """Všechny UI textové řetězce."""
+    """All UI text strings."""
 
-    # Hlavní okno
+    # Main window
     WINDOW_TITLE = "Sample Mapping Editor for Ithaca Player"
     WINDOW_READY = "Ready"
 
@@ -253,62 +253,64 @@ class Texts:
     STATUS_NO_SAMPLES = "No valid samples found"
 
     # Sample list
-    SAMPLE_LIST_NO_SAMPLES = "Žádné samples načteny"
-    SAMPLE_LIST_STATS_PREFIX = "Celkem:"
+    SAMPLE_LIST_NO_SAMPLES = "No samples loaded"
+    SAMPLE_LIST_STATS_PREFIX = "Total:"
     SAMPLE_LIST_STATS_SUFFIX = "samples"
 
     # Audio player
     AUDIO_PLAYER_TITLE = "Audio Player"
-    AUDIO_READY = "Audio připraven"
-    AUDIO_NOT_AVAILABLE = "Audio není k dispozici"
-    AUDIO_NO_SAMPLE = "Žádný sample vybrán"
-    BTN_PLAY = "Přehrát (Mezerník)"
+    AUDIO_READY = "Audio ready"
+    AUDIO_NOT_AVAILABLE = "Audio not available"
+    AUDIO_NO_SAMPLE = "No sample selected"
+    BTN_PLAY = "Play (Space)"
     BTN_STOP = "Stop (ESC)"
 
     # Mapping matrix
-    MATRIX_TITLE_TEMPLATE = "Sample mapping matrix (LMB = play / RMB = remove)"
-    MATRIX_INFO_LINE1 = "💡 Tip: Přetáhněte sample z levého seznamu pomocí ikonky ⋮⋮"
-    MATRIX_INFO_LINE2 = "nebo použijte tlačítko ⚡ pro automatické přiřazení"
-    MATRIX_MAPPED_TEMPLATE = "Namapováno: {count} samples"
+    MATRIX_TITLE = "Mapping Matrix"
+    MATRIX_RANGE_INFO_TEMPLATE = "Piano range A0-C8 (MIDI {min_midi}-{max_midi})"
+    MATRIX_MAPPED_TEMPLATE = "Mapped: {count} samples"
+    MATRIX_TITLE_TEMPLATE = "Sample mapping matrix (LMB = play / RMB = remove)"  # Deprecated - kept for compatibility
+    MATRIX_INFO_LINE1 = "💡 Tip: Drag sample from left list using ⋮⋮ icon"
+    MATRIX_INFO_LINE2 = "or use ⚡ button for automatic assignment"
 
     # Session dialog
     SESSION_DIALOG_TITLE = "Sample Mapping Editor - Session Management"
-    SESSION_HEADER = "Vítejte v Sample Mapping Editoru"
-    SESSION_SUBTITLE = "Vyberte existující session nebo vytvořte novou"
-    SESSION_RECENT_TITLE = "Nedávné Sessions"
-    SESSION_NEW_TITLE = "Nová Session"
-    SESSION_NEW_INSTRUCTION = "Zadejte název pro novou session:"
-    SESSION_NAME_PLACEHOLDER = "např. drums_2024, vocals_project..."
-    SESSION_VELOCITY_LABEL = "Počet velocity layers:"
-    SESSION_VELOCITY_INFO = "(1 = jeden layer, 4 = čtyři layery, 8 = osm layerů)"
-    SESSION_INFO_LABEL = "Session soubory jsou uloženy v složce 'sessions'"
-    SESSION_NO_SESSIONS = "Žádné sessions nenalezeny.\\nVytvořte novou session vpravo."
-    BTN_LOAD_SESSION = "Načíst Session"
-    BTN_CREATE_SESSION = "Vytvořit Session"
-    BTN_EXIT = "Ukončit"
+    SESSION_HEADER = "Welcome to Sample Mapping Editor"
+    SESSION_SUBTITLE = "Select existing session or create a new one"
+    SESSION_RECENT_TITLE = "Recent Sessions"
+    SESSION_NEW_TITLE = "New Session"
+    SESSION_NEW_INSTRUCTION = "Enter name for new session:"
+    SESSION_NAME_PLACEHOLDER = "e.g. drums_2024, vocals_project..."
+    SESSION_VELOCITY_LABEL = "Number of velocity layers:"
+    SESSION_VELOCITY_INFO = "(1 = one layer, 4 = four layers, 8 = eight layers)"
+    SESSION_INFO_LABEL = "Session files are stored in 'sessions' folder"
+    SESSION_NO_SESSIONS = "No sessions found.\\nCreate a new session on the right."
+    BTN_LOAD_SESSION = "Load Session"
+    BTN_CREATE_SESSION = "Create Session"
+    BTN_EXIT = "Exit"
 
-    # Validation zprávy
-    VALIDATION_INVALID_CHARS = "Název obsahuje nepovolené znaky"
-    VALIDATION_SESSION_EXISTS = "Session s tímto názvem již existuje"
-    VALIDATION_CHECK_ERROR = "Chyba při kontrole existujících sessions"
+    # Validation messages
+    VALIDATION_INVALID_CHARS = "Name contains invalid characters"
+    VALIDATION_SESSION_EXISTS = "Session with this name already exists"
+    VALIDATION_CHECK_ERROR = "Error checking existing sessions"
 
-    # Error zprávy
-    ERROR_LOAD_SESSION = "Nelze načíst session '{name}'"
-    ERROR_CREATE_SESSION = "Session '{name}' již existuje"
-    ERROR_REFRESH_SESSIONS = "Nelze načíst seznam sessions:\\n{error}"
-    ERROR_LOADING_SESSION = "Chyba při načítání session:\\n{error}"
-    ERROR_CREATING_SESSION = "Chyba při vytváření session:\\n{error}"
+    # Error messages
+    ERROR_LOAD_SESSION = "Cannot load session '{name}'"
+    ERROR_CREATE_SESSION = "Session '{name}' already exists"
+    ERROR_REFRESH_SESSIONS = "Cannot load session list:\\n{error}"
+    ERROR_LOADING_SESSION = "Error loading session:\\n{error}"
+    ERROR_CREATING_SESSION = "Error creating session:\\n{error}"
     ERROR_OUTPUT_FOLDER = "Output folder is not writable"
 
     # Tooltips
-    TOOLTIP_DISABLE_SAMPLE = "Zakázat použití tohoto sample"
-    TOOLTIP_DRAG_TO_MATRIX = "Přetáhnout do matice (Drag & Drop)"
-    TOOLTIP_PLAY_SAMPLE = "Přehrát audio sample"
-    TOOLTIP_PLAY_MIDI_TONE = "Přehrát referenční MIDI tón (pro porovnání)"
-    TOOLTIP_TRANSPOSE_TEMPLATE = "Transponovat o {semitones} semitónů"
-    TOOLTIP_PLAY_MAPPED = "Přehrát namapovaný sample: {filename}"
-    TOOLTIP_RESET_CELL = "Odstranit sample z této pozice"
-    TOOLTIP_ASSIGN_AUTO = "Automaticky přiřadit sample na tuto pozici"
+    TOOLTIP_DISABLE_SAMPLE = "Disable this sample"
+    TOOLTIP_DRAG_TO_MATRIX = "Drag to matrix (Drag & Drop)"
+    TOOLTIP_PLAY_SAMPLE = "Play audio sample"
+    TOOLTIP_PLAY_MIDI_TONE = "Play reference MIDI tone (for comparison)"
+    TOOLTIP_TRANSPOSE_TEMPLATE = "Transpose by {semitones} semitones"
+    TOOLTIP_PLAY_MAPPED = "Play mapped sample: {filename}"
+    TOOLTIP_RESET_CELL = "Remove sample from this position"
+    TOOLTIP_ASSIGN_AUTO = "Automatically assign sample to this position"
     # Note: Velocity layers range is defined in AUDIO.Velocity (1-8 by default)
     # Use dynamic formatting: f"...({AUDIO.Velocity.MIN_LAYERS}-{AUDIO.Velocity.MAX_LAYERS})"
 
@@ -342,14 +344,14 @@ Built with PySide6 and Python"""
     INFO_EXPORT_TITLE = "Export Completed"
 
     # Export messages
-    EXPORT_PREPARING = "Příprava exportu..."
-    EXPORT_VALIDATING = "Validace samples..."
-    EXPORT_CHECKING_FOLDER = "Kontrola výstupní složky..."
-    EXPORT_FOLDER_ERROR = "Výstupní složka není dostupná pro zápis"
-    EXPORT_STARTING = "Zahajuji export samples..."
-    EXPORT_COMPLETED_TEMPLATE = "Export dokončen: {exported}/{total} samples"
+    EXPORT_PREPARING = "Preparing export..."
+    EXPORT_VALIDATING = "Validating samples..."
+    EXPORT_CHECKING_FOLDER = "Checking output folder..."
+    EXPORT_FOLDER_ERROR = "Output folder is not writable"
+    EXPORT_STARTING = "Starting sample export..."
+    EXPORT_COMPLETED_TEMPLATE = "Export completed: {exported}/{total} samples"
     EXPORT_CANCELLED = "Export cancelled"
-    EXPORT_STATUS_TEMPLATE = "Exportuji: {current}/{total} samples"
+    EXPORT_STATUS_TEMPLATE = "Exporting: {current}/{total} samples"
     EXPORT_INFO_TEMPLATE = """Export completed!
 
 Exported: {exported_count} samples
@@ -368,35 +370,35 @@ Folder: {output_folder}"""
     STATUS_CACHE_INFO = "Cache: {cached} samples loaded from cache, {analyzed} newly analyzed"
 
     # Audio messages
-    AUDIO_PLAYING = "▶ Přehrává: {filename}"
-    AUDIO_STOPPED = "Zastaveno"
-    AUDIO_MIDI_PLAYING = "♪ Přehrává MIDI tón: {note_name}..."
-    AUDIO_MIDI_SUCCESS = "✓ MIDI tón: {note_name} ({frequency:.1f} Hz)"
-    AUDIO_MIDI_ERROR = "Chyba MIDI: {error}"
-    AUDIO_SAMPLE_SET = "Nastaven: {filename}"
+    AUDIO_PLAYING = "▶ Playing: {filename}"
+    AUDIO_STOPPED = "Stopped"
+    AUDIO_MIDI_PLAYING = "♪ Playing MIDI tone: {note_name}..."
+    AUDIO_MIDI_SUCCESS = "✓ MIDI tone: {note_name} ({frequency:.1f} Hz)"
+    AUDIO_MIDI_ERROR = "MIDI error: {error}"
+    AUDIO_SAMPLE_SET = "Set: {filename}"
 
 
 # =============================================================================
-# PRECISION A FORMÁTOVÁNÍ
+# PRECISION AND FORMATTING
 # =============================================================================
 
 class Formatting:
-    """Konstanty pro formátování čísel a textů."""
+    """Constants for number and text formatting."""
 
     # RMS precision
-    RMS_PRECISION_DISPLAY = 4  # 4 desetinná místa pro zobrazení
-    RMS_PRECISION_INTERNAL = 6  # 6 desetinných míst pro interní výpočty
+    RMS_PRECISION_DISPLAY = 4  # 4 decimal places for display
+    RMS_PRECISION_INTERNAL = 6  # 6 decimal places for internal calculations
 
-    # MIDI formátování
+    # MIDI formatting
     MIDI_FORMAT = "{:03d}"  # 000-127
 
-    # Frekvence precision
-    FREQUENCY_PRECISION = 1  # 1 desetinné místo
+    # Frequency precision
+    FREQUENCY_PRECISION = 1  # 1 decimal place
 
-    # Filename zkrácení
-    FILENAME_MAX_LENGTH = 35  # Pro drag pixmap
+    # Filename truncation
+    FILENAME_MAX_LENGTH = 35  # For drag pixmap
 
-    # Progress formátování
+    # Progress formatting
     PROGRESS_FORMAT = "{percentage}% - {message}"
 
 

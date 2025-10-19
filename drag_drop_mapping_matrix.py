@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QGroupBox, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
+from config import GUI
 from models import SampleMetadata
 from midi_utils import MidiUtils
 from drag_drop_matrix_core import DragDropMatrixCell  # OPRAVENÝ IMPORT
@@ -27,7 +28,7 @@ class DragDropMappingMatrix(QGroupBox):
     sample_selected_in_matrix = Signal(object)  # sample vybraný v matici
 
     def __init__(self, velocity_layers: int = 4):
-        super().__init__("Mapovací matice: Celý piano rozsah A0-C8 (Levý klik = přehrát/odstranit)")
+        super().__init__(GUI.Texts.MATRIX_TITLE)
         self.mapping: Dict[Tuple[int, int], SampleMetadata] = {}
         self.matrix_cells: Dict[Tuple[int, int], DragDropMatrixCell] = {}
 
@@ -67,15 +68,21 @@ class DragDropMappingMatrix(QGroupBox):
         """Vytvoří info panel s celkovými statistikami."""
         info_layout = QHBoxLayout()
 
-        range_info_label = QLabel(
-            f"Celý piano rozsah: A0-C8 (MIDI {self.piano_min_midi}-{self.piano_max_midi}) | Levý klik = přehrát/odstranit")
-        range_info_label.setStyleSheet("color: #666; font-size: 12px; font-weight: bold;")
+        # Rozsah piano
+        range_info_text = GUI.Texts.MATRIX_RANGE_INFO_TEMPLATE.format(
+            min_midi=self.piano_min_midi,
+            max_midi=self.piano_max_midi
+        )
+        range_info_label = QLabel(range_info_text)
+        range_info_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
         info_layout.addWidget(range_info_label)
 
         info_layout.addStretch()
 
-        self.stats_label = QLabel("Namapováno: 0 samples")
-        self.stats_label.setStyleSheet("color: #333; font-weight: bold;")
+        # Statistiky
+        stats_text = GUI.Texts.MATRIX_MAPPED_TEMPLATE.format(count=0)
+        self.stats_label = QLabel(stats_text)
+        self.stats_label.setStyleSheet("color: #2c3e50; font-weight: bold; font-size: 11px;")
         info_layout.addWidget(self.stats_label)
 
         layout.addLayout(info_layout)
@@ -420,7 +427,8 @@ class DragDropMappingMatrix(QGroupBox):
 
     def _update_stats(self):
         """Aktualizuje statistiky."""
-        self.stats_label.setText(f"Namapováno: {len(self.mapping)} samples")
+        stats_text = GUI.Texts.MATRIX_MAPPED_TEMPLATE.format(count=len(self.mapping))
+        self.stats_label.setText(stats_text)
 
     def get_mapped_samples(self) -> Dict[Tuple[int, int], SampleMetadata]:
         """Vrátí mapování."""
