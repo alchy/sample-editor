@@ -97,7 +97,7 @@ class Dimensions:
     ITEM_HEIGHT_COMPACT = 25
 
     # Buttony
-    BTN_DRAG_WIDTH = 120
+    BTN_DRAG_WIDTH = 95  # Width for icon + text drag button with padding
     BTN_DRAG_HEIGHT = 30
     BTN_PLAY_WIDTH = 36
     BTN_PLAY_HEIGHT = 24
@@ -314,8 +314,8 @@ class Texts:
     # Note: Velocity layers range is defined in AUDIO.Velocity (1-8 by default)
     # Use dynamic formatting: f"...({AUDIO.Velocity.MIN_LAYERS}-{AUDIO.Velocity.MAX_LAYERS})"
 
-    # Ikony a symboly
-    ICON_DRAG = "⋮Drag&Drop⋮"
+    # Icons and symbols
+    ICON_DRAG = "⇄ Drag"  # Bidirectional arrows with text for drag & drop
     ICON_PLAY_SAMPLE = "♪"
     ICON_PLAY_MIDI = "♫"
     ICON_RESET = "⌫"

@@ -174,7 +174,8 @@ class SampleListItem(QWidget):
                 border-radius: 4px;
                 border: none;
                 font-size: 14px;
-                letter-spacing: -1px;
+                letter-spacing: 0px;
+                padding: 4px 8px;
             }
             QPushButton:hover {
                 background-color: #1976D2;
@@ -468,7 +469,7 @@ class SampleListItem(QWidget):
                 tooltip += "neznámý důvod"
             self.drag_button.setToolTip(tooltip)
         else:
-            self.drag_button.setToolTip("Přetáhnout do matice (Drag & Drop)")
+            self.drag_button.setToolTip(GUI.Texts.TOOLTIP_DRAG_TO_MATRIX)
 
     def _update_colors(self):
         """Aktualizuje barvy podle stavu."""
