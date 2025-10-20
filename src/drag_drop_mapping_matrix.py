@@ -9,9 +9,9 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
 from config import GUI
-from models import SampleMetadata
-from midi_utils import MidiUtils
-from drag_drop_matrix_core import DragDropMatrixCell  # OPRAVENÝ IMPORT
+from .models import SampleMetadata
+from .midi_utils import MidiUtils
+from .drag_drop_matrix_core import DragDropMatrixCell  # OPRAVENÝ IMPORT
 import logging
 
 logger = logging.getLogger(__name__)

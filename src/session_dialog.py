@@ -11,7 +11,7 @@ from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QListWidgetItem
 
 from config import AUDIO, GUI
-from session_manager import SessionManager
+from .session_manager import SessionManager
 import logging
 
 logger = logging.getLogger(__name__)

@@ -12,6 +12,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('config', 'config'),  # Include config folder
+        ('src', 'src'),  # Include src folder with all modules
         # Sessions folder is created at runtime, no need to include
     ],
     hiddenimports=[

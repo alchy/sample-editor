@@ -8,7 +8,7 @@ import logging
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import QTimer
 
-from main_window import MainWindow
+from src.main_window import MainWindow
 from config import APP
 
 # Nastavení loggingu
@@ -61,7 +61,7 @@ def main():
 
         # NOVÉ: Shutdown audio worker před ukončením
         logger.info("Shutting down audio worker...")
-        from audio_worker import shutdown_audio_worker
+        from src.audio_worker import shutdown_audio_worker
         shutdown_audio_worker()
         logger.info("✓ Audio worker shutdown complete")
 
@@ -76,7 +76,7 @@ def main():
 def show_startup_info(window):
     """Zobrazí informace při spuštění (volitelné)."""
     try:
-        from audio_player import AUDIO_AVAILABLE
+        from src.audio_player import AUDIO_AVAILABLE
         audio_status = "✓ Audio available" if AUDIO_AVAILABLE else "⚠ Audio not available"
 
         QMessageBox.information(window, APP.Info.FULL_NAME,

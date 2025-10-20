@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Set
 from datetime import datetime
 
-from models import SampleMetadata
+from .models import SampleMetadata
 
 logger = logging.getLogger(__name__)
 

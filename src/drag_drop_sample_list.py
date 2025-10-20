@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (QGroupBox, QVBoxLayout, QLabel, QListWidget,
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QKeyEvent
 
-from models import SampleMetadata
-from inline_midi_editor import SampleListItem
+from .models import SampleMetadata
+from .inline_midi_editor import SampleListItem
 from config import GUI
 import logging
 

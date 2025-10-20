@@ -7,9 +7,9 @@ from typing import Dict, Tuple
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
-from models import SampleMetadata
-from export_utils import ExportManager, ExportValidator
-from midi_utils import MidiUtils
+from .models import SampleMetadata
+from .export_utils import ExportManager, ExportValidator
+from .midi_utils import MidiUtils
 
 logger = logging.getLogger(__name__)
 

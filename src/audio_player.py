@@ -9,9 +9,9 @@ from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QPushButton, QLabel
 
 from config import GUI, AUDIO
-from models import SampleMetadata
-from midi_utils import MidiUtils
-from audio_worker import get_audio_worker, AUDIO_AVAILABLE
+from .models import SampleMetadata
+from .midi_utils import MidiUtils
+from .audio_worker import get_audio_worker, AUDIO_AVAILABLE
 import numpy as np
 
 logger = logging.getLogger(__name__)

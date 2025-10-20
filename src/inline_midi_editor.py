@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QPushButton, QFrame
 from PySide6.QtCore import Qt, Signal, QMimeData
 from PySide6.QtGui import QFont, QDrag, QPixmap, QPainter, QColor, QMouseEvent
 
-from models import SampleMetadata
-from midi_utils import MidiUtils
+from .models import SampleMetadata
+from .midi_utils import MidiUtils
 from config import GUI
 import logging
 

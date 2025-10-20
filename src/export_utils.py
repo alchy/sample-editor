@@ -9,8 +9,8 @@ from typing import Dict, List, Tuple, Optional, Union
 import logging
 
 from config import EXPORT, AUDIO
-from models import SampleMetadata
-from midi_utils import MidiUtils
+from .models import SampleMetadata
+from .midi_utils import MidiUtils
 
 logger = logging.getLogger(__name__)
 

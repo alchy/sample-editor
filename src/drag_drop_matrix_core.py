@@ -7,8 +7,8 @@ from PySide6.QtWidgets import QPushButton, QMessageBox
 from PySide6.QtCore import Qt, Signal, QMimeData, QTimer
 from PySide6.QtGui import QDrag, QPainter, QColor, QPixmap, QMouseEvent, QKeyEvent
 
-from models import SampleMetadata
-from midi_utils import MidiUtils
+from .models import SampleMetadata
+from .midi_utils import MidiUtils
 import logging
 
 logger = logging.getLogger(__name__)

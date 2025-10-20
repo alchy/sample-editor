@@ -6,8 +6,8 @@ import logging
 from typing import List, Dict
 from PySide6.QtCore import QThread, Signal
 
-from models import SampleMetadata
-from midi_utils import MidiUtils
+from .models import SampleMetadata
+from .midi_utils import MidiUtils
 
 logger = logging.getLogger(__name__)
 

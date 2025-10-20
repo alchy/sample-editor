@@ -13,20 +13,20 @@ from PySide6.QtGui import QAction, QKeySequence
 
 # Import všech potřebných modulů
 from config import GUI
-from models import SampleMetadata
-from export_utils import ExportManager
-from export_thread import ExportThread
-from auto_assign_thread import AutoAssignWorker
-from clear_matrix_thread import ClearMatrixWorker
-from session_manager import SessionManager
-from session_dialog import SessionDialog
-from session_aware_analyzer import SessionAwareBatchAnalyzer
-from midi_utils import MidiUtils
+from .models import SampleMetadata
+from .export_utils import ExportManager
+from .export_thread import ExportThread
+from .auto_assign_thread import AutoAssignWorker
+from .clear_matrix_thread import ClearMatrixWorker
+from .session_manager import SessionManager
+from .session_dialog import SessionDialog
+from .session_aware_analyzer import SessionAwareBatchAnalyzer
+from .midi_utils import MidiUtils
 
 # Import UI komponent
-from drag_drop_sample_list import DragDropSampleList
-from drag_drop_mapping_matrix import DragDropMappingMatrix
-from audio_player import AudioPlayer
+from .drag_drop_sample_list import DragDropSampleList
+from .drag_drop_mapping_matrix import DragDropMappingMatrix
+from .audio_player import AudioPlayer
 
 logger = logging.getLogger(__name__)
 
