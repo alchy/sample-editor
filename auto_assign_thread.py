@@ -18,7 +18,8 @@ class AutoAssignWorker(QThread):
     progress_updated = Signal(int, str)  # progress percentage, message
     assign_completed = Signal(dict)  # stats dictionary
     assign_failed = Signal(str)  # error message
-    sample_assignment_requested = Signal(object, int, int, object)  # sample, midi_note, velocity, old_sample_or_none
+    sample_assignment_requested = Signal(object, int, int)  # sample, midi_note, velocity
+    refresh_gui_requested = Signal()  # request GUI refresh after bulk operations
 
     def __init__(self, mapping_matrix, samples: List[SampleMetadata], piano_min: int, piano_max: int):
         super().__init__()
@@ -52,13 +53,14 @@ class AutoAssignWorker(QThread):
 
                 stats['total_notes'] += 1
 
-                # Update progress after EVERY note for smooth visual feedback
-                progress = int(((idx + 1) / total_notes) * 100)
-                note_name = MidiUtils.midi_to_note_name(midi_note)
-                self.progress_updated.emit(
-                    progress,
-                    f"Auto-assigning: {note_name} (MIDI {midi_note}) - {idx+1}/{total_notes} notes"
-                )
+                # Update progress every 5 notes (or at milestones) for smooth visual feedback
+                if (idx + 1) % 5 == 0 or (idx + 1) == total_notes or idx == 0:
+                    progress = int(((idx + 1) / total_notes) * 100)
+                    note_name = MidiUtils.midi_to_note_name(midi_note)
+                    self.progress_updated.emit(
+                        progress,
+                        f"Auto-assigning: {note_name} (MIDI {midi_note}) - {idx+1}/{total_notes} notes"
+                    )
 
                 # Count samples before assign
                 before_count = sum(1 for key in self.mapping_matrix.mapping.keys() if key[0] == midi_note)
@@ -73,6 +75,14 @@ class AutoAssignWorker(QThread):
                 if after_count > before_count:
                     stats['assigned_notes'] += 1
                     stats['total_samples'] += (after_count - before_count)
+
+            # Refresh GUI once at the end
+            logger.info("Refreshing GUI after bulk auto-assign...")
+            self.refresh_gui_requested.emit()
+
+            # Give GUI time to refresh
+            import time
+            time.sleep(0.1)
 
             # Completion
             logger.info(f"Auto-assign completed: {stats['assigned_notes']} notes, {stats['total_samples']} samples")
@@ -110,31 +120,36 @@ class AutoAssignWorker(QThread):
             self._assign_sample_to_velocity(available_samples[0], midi_note, 0)
             assigned_count = 1
         else:
-            range_size = max_rms - min_rms
+            # Sort samples by velocity_amplitude (ascending: quietest to loudest)
+            sorted_samples = sorted(available_samples, key=lambda s: s.velocity_amplitude)
             velocity_layers = self.mapping_matrix.velocity_layers
+            num_samples = len(sorted_samples)
 
-            for velocity in range(velocity_layers):
-                part_start = min_rms + (velocity / float(velocity_layers)) * range_size
-                part_end = min_rms + ((velocity + 1) / float(velocity_layers)) * range_size
-                part_center = (part_start + part_end) / 2.0
+            # Distribute samples across layers ensuring each sample is used only once
+            # If we have fewer samples than layers, spread them proportionally with gaps
+            if num_samples >= velocity_layers:
+                # More samples than layers - select subset using proportional indexing
+                for velocity in range(velocity_layers):
+                    sample_idx = int((velocity + 0.5) * num_samples / velocity_layers)
+                    sample_idx = min(sample_idx, num_samples - 1)
+                    sample = sorted_samples[sample_idx]
+                    self._assign_sample_to_velocity(sample, midi_note, velocity)
+                    assigned_count += 1
+            else:
+                # Fewer samples than layers - assign each sample to proportional layer
+                # This leaves gaps where no sample is available
+                for sample_idx, sample in enumerate(sorted_samples):
+                    # Calculate which velocity layer this sample should go to
+                    # Using (sample_idx + 0.5) to center the sample in its range
+                    velocity_layer = int((sample_idx + 0.5) * velocity_layers / num_samples)
+                    velocity_layer = min(velocity_layer, velocity_layers - 1)
 
-                best_sample = None
-                best_distance = float('inf')
-
-                for sample in available_samples:
-                    distance = abs(sample.velocity_amplitude - part_center)
-                    if distance < best_distance:
-                        best_sample = sample
-                        best_distance = distance
-
-                if best_sample:
-                    self._assign_sample_to_velocity(best_sample, midi_note, velocity)
-                    available_samples.remove(best_sample)
+                    self._assign_sample_to_velocity(sample, midi_note, velocity_layer)
                     assigned_count += 1
 
         note_name = MidiUtils.midi_to_note_name(midi_note)
         logger.debug(f"Auto-assigned {assigned_count} samples for {note_name} (MIDI {midi_note}) "
-                    f"using center-based algorithm (RMS range: {min_rms:.6f} - {max_rms:.6f})")
+                    f"using monotonic distribution (RMS range: {min_rms:.6f} - {max_rms:.6f})")
 
     def _find_samples_for_midi_note(self, midi_note: int) -> List[SampleMetadata]:
         """Find all samples with given MIDI note (excluding disabled and filtered)."""
@@ -154,25 +169,11 @@ class AutoAssignWorker(QThread):
     def _assign_sample_to_velocity(self, sample: SampleMetadata, midi_note: int, velocity: int):
         """
         Assign sample to specific MIDI position - thread-safe version.
-        Uses Qt's meta object system to ensure the call is made in the GUI thread.
+        Emits signal to request assignment in GUI thread.
         """
-        from PySide6.QtCore import QMetaObject, Qt, Q_ARG
-
-        key = (midi_note, velocity)
-        if key in self.mapping_matrix.mapping:
-            old_sample = self.mapping_matrix.mapping[key]
-            old_sample.mapped = False
-
-        # Call add_sample in the GUI thread using Qt's meta object system
-        # This ensures thread-safety by queueing the call to the main thread
-        QMetaObject.invokeMethod(
-            self.mapping_matrix,
-            "add_sample",
-            Qt.ConnectionType.QueuedConnection,
-            Q_ARG(object, sample),
-            Q_ARG(int, midi_note),
-            Q_ARG(int, velocity)
-        )
+        # Emit signal to add sample in GUI thread
+        # The signal/slot mechanism handles thread-safety automatically
+        self.sample_assignment_requested.emit(sample, midi_note, velocity)
 
     def cancel_assign(self):
         """Cancel ongoing auto-assign operation."""

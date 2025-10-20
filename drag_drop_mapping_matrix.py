@@ -379,6 +379,29 @@ class DragDropMappingMatrix(QGroupBox):
             midi_note, velocity = key
             self.remove_sample(midi_note, velocity)
 
+    def clear_matrix_bulk(self):
+        """
+        Vyčistí celou mapovací matici v bulk režimu - bez GUI updates během procesu.
+        GUI se updatuje jen jednou na konci. Vhodné pro threading.
+        """
+        # Unmap all samples
+        for sample in self.mapping.values():
+            sample.mapped = False
+
+        # Clear all cells (without individual GUI updates)
+        for cell in self.matrix_cells.values():
+            if cell.sample:
+                cell.sample = None
+
+        # Clear mapping dictionary
+        self.mapping.clear()
+
+        # Now update GUI once at the end
+        for cell in self.matrix_cells.values():
+            cell._update_style()
+
+        self._update_stats()
+
     def add_sample(self, sample: SampleMetadata, midi_note: int, velocity: int):
         """Přidá sample do matice."""
         key = (midi_note, velocity)
@@ -394,6 +417,30 @@ class DragDropMappingMatrix(QGroupBox):
             self._update_stats()
 
             self.sample_mapped.emit(sample, midi_note, velocity)
+
+    def add_sample_silent(self, sample: SampleMetadata, midi_note: int, velocity: int):
+        """
+        Přidá sample do matice bez GUI updates a signálů.
+        Použití: bulk operace kde GUI update proběhne jednou na konci.
+        """
+        key = (midi_note, velocity)
+        if key in self.matrix_cells:
+            cell = self.matrix_cells[key]
+            if cell.sample:
+                cell.sample.mapped = False
+
+            cell.sample = sample
+            sample.mapped = True
+            self.mapping[key] = sample
+
+    def refresh_all_cells(self):
+        """
+        Aktualizuje GUI všech buněk najednou.
+        Použití: po bulk operacích (add_sample_silent).
+        """
+        for cell in self.matrix_cells.values():
+            cell._update_style()
+        self._update_stats()
 
     def remove_sample(self, midi_note: int, velocity: int):
         """Odebere sample z matice."""
