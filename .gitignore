@@ -46,10 +46,19 @@ __old__/
 # Claude Code
 .claude/
 
-# Build artifacts
-build/
+# Build artifacts (PyInstaller outputs)
 dist/
 *.egg-info/
 *.spec~
 releases/
 installers/
+
+# PyInstaller temporary files
+build/sample-editor/  # PyInstaller temp directory
+build/build/          # Alternative PyInstaller temp
+build/dist/           # PyInstaller output directory
+
+# But keep build configuration files
+!build/
+!build/*.spec
+!build/*.md

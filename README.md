@@ -412,17 +412,14 @@ sample-editor/
 ├── sessions/                        # 💾 Session files (JSON)
 │   └── *.json                       #    Session data & cache
 │
-├── src/                             # 🏗️ Refactored architecture (DDD)
-│   ├── domain/                      #    Domain models & interfaces
-│   ├── application/                 #    Application services
-│   ├── infrastructure/              #    Infrastructure implementations
-│   └── presentation/                #    Presentation layer
+├── tests/                           # 🧪 Tests & verification scripts
+│   ├── run_tests.py                 #    Test runner helper
+│   ├── test_*.py                    #    Unit & integration tests
+│   └── analyze_d6_mapping.py        #    Velocity verification helper
 │
-├── tests/                           # 🧪 Unit & integration tests
-│   ├── unit/                        #    Unit tests
-│   └── integration/                 #    Integration tests
-│
-├── __old__/                         # 🗄️ Deprecated/old files
+├── build/                           # 🔨 Build configuration
+│   ├── sample-editor.spec           #    PyInstaller spec file
+│   └── BUILD.md                     #    Build instructions
 │
 ├── requirements.txt                 # 📦 Runtime dependencies
 ├── requirements-dev.txt             # 🛠️ Development dependencies
@@ -696,30 +693,30 @@ session_folder = APP.Paths.SESSIONS_FOLDER
 ### Run Tests
 
 ```bash
-# All tests
-pytest
+# Run all tests using helper script
+python tests/run_tests.py
 
-# Unit tests only
-pytest -m unit
+# Run specific test
+python tests/run_tests.py velocity
+python tests/run_tests.py metadata
 
-# Integration tests
-pytest -m integration
+# Or use pytest directly
+pytest tests/
 
-# Verbose with short tracebacks
-pytest -v --tb=short
-
-# Show test durations
-pytest --durations=10
+# Verbose output
+pytest tests/ -v --tb=short
 ```
 
 ### Test Structure
 ```
 tests/
-├── unit/
-│   ├── domain/
-│   ├── application/
-│   └── infrastructure/
-└── integration/
+├── run_tests.py                 # Test runner helper
+├── test_velocity_assignment.py  # Velocity algorithm tests
+├── test_sample_metadata.py      # Metadata tests
+├── test_batch_analyzer.py       # Batch analyzer tests
+├── test_session_manager_cache.py # Session cache tests
+├── analyze_d6_mapping.py        # Velocity verification helper
+└── ...
 ```
 
 ---

@@ -137,7 +137,7 @@ installers/
 
 ### "ImportError" when running executable
 
-**Solution**: Add missing module to `sample-editor.spec` in `hiddenimports`:
+**Solution**: Add missing module to `build/sample-editor.spec` in `hiddenimports`:
 ```python
 hiddenimports=[
     ...
@@ -147,14 +147,14 @@ hiddenimports=[
 
 Then rebuild:
 ```bash
-build.bat
+pyinstaller build/sample-editor.spec --clean
 ```
 
 ### Executable is too large (>300 MB)
 
 **Solutions**:
 1. **Enable UPX compression** - Already enabled in spec file
-2. **Exclude unnecessary packages** - Edit `sample-editor.spec`:
+2. **Exclude unnecessary packages** - Edit `build/sample-editor.spec`:
    ```python
    excludes=[
        'matplotlib',  # Add packages you don't need
@@ -184,21 +184,21 @@ Or manually compile:
 
 ### Build Without Compression
 
-Edit `sample-editor.spec`:
+Edit `build/sample-editor.spec`:
 ```python
 upx=False,  # Disable UPX compression (faster build, larger file)
 ```
 
 ### Debug Build (with console window)
 
-Edit `sample-editor.spec`:
+Edit `build/sample-editor.spec`:
 ```python
 console=True,  # Show console for debugging
 ```
 
 ### Exclude More Packages
 
-Edit `sample-editor.spec` → `excludes` list to reduce file size.
+Edit `build/sample-editor.spec` → `excludes` list to reduce file size.
 
 ---
 
