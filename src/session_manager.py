@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Set
 from datetime import datetime
 
 from .models import SampleMetadata
+from config import SESSIONS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +23,10 @@ class SessionManager:
         Inicializuje session manager.
 
         Args:
-            sessions_folder: Složka pro ukládání session souborů (default: ./sessions)
+            sessions_folder: Složka pro ukládání session souborů (default: platform-specific)
         """
-        self.sessions_folder = sessions_folder or Path("sessions")
-        self.sessions_folder.mkdir(exist_ok=True)
+        self.sessions_folder = sessions_folder or SESSIONS_DIR
+        self.sessions_folder.mkdir(parents=True, exist_ok=True)
 
         self.current_session = None
         self.session_data = None
