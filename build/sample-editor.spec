@@ -7,12 +7,13 @@ Builds standalone executable with all dependencies included
 block_cipher = None
 
 a = Analysis(
-    ['main.py'],
-    pathex=[],
+    ['../main.py'],  # Path relative to build/ directory
+    pathex=['..'],  # Add parent directory to path
     binaries=[],
     datas=[
-        ('config', 'config'),  # Include config folder
-        ('src', 'src'),  # Include src folder with all modules
+        ('../config', 'config'),  # Include config folder
+        ('../src', 'src'),  # Include src folder with all modules
+        ('../resources', 'resources'),  # Include resources (icon, etc.)
         # Sessions folder is created at runtime, no need to include
     ],
     hiddenimports=[
@@ -92,5 +93,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='resources/app_icon.ico'  # Application icon
+    icon='../resources/app_icon.ico'  # Application icon
 )
