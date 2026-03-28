@@ -116,11 +116,18 @@ class MappingSaveRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 class ExportRequest(BaseModel):
-    """Požadavek na export. output_folder je volitelný — výchozí je data/{session}/export/."""
+    """Požadavek na export. Výstupní složka je vždy data/{session}/export/ na serveru."""
     session_name: str
-    output_folder: Optional[str] = None
     mapping: List[MappingEntry]
     include_instrument_definition: bool = True
+
+
+class Sf2ExportRequest(BaseModel):
+    """Požadavek na SF2 export."""
+    session_name: str
+    mapping: List[MappingEntry]
+    instrument_name: Optional[str] = "Custom Bank"
+    velocity_layers: int = 4
 
 
 class ExportResult(BaseModel):

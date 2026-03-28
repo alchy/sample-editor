@@ -100,9 +100,11 @@ def download_export_file(name: str, filename: str):
     """Stáhne jeden soubor z exportu."""
     d = export_dir(name)
     path = (d / filename).resolve()
-    # Bezpečnostní kontrola — nesmí vyjít z export dir
-    if not str(path).startswith(str(d.resolve())):
+    # Bezpečnostní kontrola — nesmí vyjít z export dir (is_relative_to je imunní vůči symlink races přes startswith)
+    try:
+        path.relative_to(d.resolve())
+    except ValueError:
         raise HTTPException(status_code=400, detail="Neplatná cesta.")
     if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail=f"Soubor '{filename}' nenalezen.")
+        raise HTTPException(status_code=404, detail="Soubor nenalezen.")
     return FileResponse(str(path), filename=filename)

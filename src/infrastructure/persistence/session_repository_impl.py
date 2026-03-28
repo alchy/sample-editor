@@ -4,6 +4,7 @@ JsonSessionRepository - JSON-based persistence pro sessions.
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
@@ -11,6 +12,17 @@ from datetime import datetime
 from src.domain.interfaces import ISessionRepository
 
 logger = logging.getLogger(__name__)
+
+_VALID_SESSION_NAME = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
+
+
+def _validate_session_name(name: str) -> None:
+    """Vyhodí ValueError pokud název session obsahuje nebezpečné znaky."""
+    if not _VALID_SESSION_NAME.match(name):
+        raise ValueError(
+            f"Neplatný název session '{name}'. "
+            "Povoleny jsou jen písmena, čísla, podtržítko a pomlčka (max 64 znaků)."
+        )
 
 
 class JsonSessionRepository(ISessionRepository):
@@ -136,5 +148,6 @@ class JsonSessionRepository(ISessionRepository):
             return False
 
     def _get_session_file(self, session_name: str) -> Path:
-        """Vrati cestu k session souboru."""
+        """Vrati cestu k session souboru. Vyhodí ValueError pro neplatné názvy."""
+        _validate_session_name(session_name)
         return self.sessions_folder / f"session-{session_name}.json"

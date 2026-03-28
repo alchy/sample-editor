@@ -17,6 +17,7 @@ from api.schemas import (
     FolderScanRequest, FolderScanResponse,
 )
 from api.dependencies import get_session_service
+from api.data_dirs import DATA_ROOT
 from src.application.services.session_service import SessionService
 
 router = APIRouter()
@@ -93,9 +94,17 @@ def scan_folder(
     Prohledá zadanou složku a vrátí seznam audio souborů.
     Neanalyzuje — jen vrátí cesty pro následné volání /analyze/batch.
     """
-    folder = Path(request.folder_path)
+    folder = Path(request.folder_path).resolve()
+    # Omezení na DATA_ROOT — nelze skenovat libovolné systémové složky
+    try:
+        folder.relative_to(DATA_ROOT.resolve())
+    except ValueError:
+        raise HTTPException(
+            status_code=403,
+            detail="Skenování složek mimo data/ adresář je zakázáno.",
+        )
     if not folder.exists() or not folder.is_dir():
-        raise HTTPException(status_code=400, detail=f"Složka '{request.folder_path}' neexistuje.")
+        raise HTTPException(status_code=400, detail="Složka neexistuje.")
 
     extensions = {ext.lower() for ext in request.extensions}
     files: List[str] = [

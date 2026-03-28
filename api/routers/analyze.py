@@ -76,9 +76,9 @@ def analyze_single(
     Analyzuje jeden audio soubor — detekce MIDI noty (CREPE) a velocity (RMS).
     Pokud je zadána session_name, výsledek se uloží do cache.
     """
-    path = Path(request.file_path)
+    path = _resolve_safe_path(request.file_path)
     if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Soubor '{request.file_path}' nenalezen.")
+        raise HTTPException(status_code=404, detail="Soubor nenalezen.")
 
     sample = SampleMetadata(filepath=path)
 
@@ -115,7 +115,15 @@ def analyze_batch(
     if not request.file_paths:
         return BatchAnalyzeResponse(results=[], successful=0, failed=0, from_cache=0)
 
-    samples = [SampleMetadata(filepath=Path(fp)) for fp in request.file_paths if Path(fp).exists()]
+    safe_paths = []
+    for fp in request.file_paths:
+        try:
+            p = _resolve_safe_path(fp)
+            if p.exists():
+                safe_paths.append(p)
+        except HTTPException:
+            pass  # Přeskočit soubory mimo data/
+    samples = [SampleMetadata(filepath=p) for p in safe_paths]
     if not samples:
         raise HTTPException(status_code=400, detail="Žádný ze zadaných souborů neexistuje.")
 
@@ -173,7 +181,15 @@ async def analyze_batch_ws(websocket: WebSocket):
         file_paths = data.get("file_paths", [])
         session_name = data.get("session_name")
 
-        samples = [SampleMetadata(filepath=Path(fp)) for fp in file_paths if Path(fp).exists()]
+        safe_paths = []
+        for fp in file_paths:
+            try:
+                p = _resolve_safe_path(fp)
+                if p.exists():
+                    safe_paths.append(p)
+            except HTTPException:
+                pass  # Přeskočit soubory mimo data/
+        samples = [SampleMetadata(filepath=p) for p in safe_paths]
         if not samples:
             await websocket.send_json({"type": "error", "message": "Žádný soubor nenalezen."})
             return

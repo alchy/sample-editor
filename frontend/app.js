@@ -5,6 +5,16 @@
 
 const API = 'http://127.0.0.1:8000/api/v1';
 
+/** Escapuje HTML speciální znaky — zabraňuje XSS při vkládání do innerHTML. */
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── Stav aplikace ────────────────────────────────────────
 let state = {
   session: null,          // název aktuální session
@@ -70,6 +80,7 @@ async function loadSession(name) {
     document.getElementById('btn-scan').disabled = false;
     document.getElementById('btn-analyze').disabled = false;
     document.getElementById('btn-export').disabled = false;
+    document.getElementById('btn-export-sf2').disabled = false;
     rebuildMatrix();
     status(`Session "${name}" načtena.`, 'ok');
     await loadUploadedSamples();
@@ -474,8 +485,9 @@ function makeCell(midi, vel) {
 
 function setCellFilled(cell, sample) {
   cell.classList.add('filled');
+  const esc = escHtml(sample.filename);
   cell.innerHTML = `
-    <span class="cell-name" title="${sample.filename}">${sample.filename}</span>
+    <span class="cell-name" title="${esc}">${esc}</span>
     <span class="cell-remove" title="Odebrat" onclick="removeMapping(${cell.dataset.midi},${cell.dataset.vel},this)">✕</span>
   `;
 }
@@ -527,7 +539,7 @@ async function runExport() {
     status('Chyba exportu: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '⬇ Export';
+    btn.textContent = '⬇ Export Ithaca';
   }
 }
 
@@ -535,13 +547,30 @@ async function showDownloadModal() {
   try {
     const data = await fetch(`${API}/files/${encodeURIComponent(state.session)}/export`).then(r => r.json());
     const list = document.getElementById('download-file-list');
-    list.innerHTML = data.files.map(f =>
-      `<div class="download-file-row">
-        <span class="download-fname">${f.name}</span>
-        <span class="download-fsize">${(f.size/1024).toFixed(1)} kB</span>
-        <a class="download-link" href="${API}/files/${encodeURIComponent(state.session)}/export/${encodeURIComponent(f.name)}" download="${f.name}">⬇</a>
-       </div>`
-    ).join('');
+    list.innerHTML = '';
+    data.files.forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'download-file-row';
+
+      const fname = document.createElement('span');
+      fname.className = 'download-fname';
+      fname.textContent = f.name;
+
+      const fsize = document.createElement('span');
+      fsize.className = 'download-fsize';
+      fsize.textContent = `${(f.size / 1024).toFixed(1)} kB`;
+
+      const link = document.createElement('a');
+      link.className = 'download-link';
+      link.href = `${API}/files/${encodeURIComponent(state.session)}/export/${encodeURIComponent(f.name)}`;
+      link.download = f.name;
+      link.textContent = '⬇';
+
+      row.appendChild(fname);
+      row.appendChild(fsize);
+      row.appendChild(link);
+      list.appendChild(row);
+    });
     openModal('modal-download');
   } catch (e) {
     status('Nepodařilo se načíst seznam exportů: ' + e.message, 'error');
@@ -565,6 +594,44 @@ async function previewExport() {
     status(`Náhled: ${items.length} souborů připraveno.`, 'ok');
   } catch (e) {
     status('Chyba náhledu: ' + e.message, 'error');
+  }
+}
+
+async function runExportSf2() {
+  if (!Object.keys(state.mapping).length) {
+    status('Nejdříve přiřaď sampley do matice.', 'error'); return;
+  }
+  const btn = document.getElementById('btn-export-sf2');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generuji SF2…';
+  try {
+    status('Generuji SF2 soubor…');
+    const resp = await fetch(`${API}/export/sf2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_name: state.session,
+        mapping: buildExportMapping(),
+        velocity_layers: state.velLayers,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+      throw new Error(err.detail || resp.statusText);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${state.session}.sf2`;
+    a.click();
+    URL.revokeObjectURL(url);
+    status('SF2 export dokončen — soubor se stahuje.', 'ok');
+  } catch (e) {
+    status('Chyba SF2 exportu: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⬇ Export SF2';
   }
 }
 
