@@ -2,6 +2,7 @@
 SessionService - Orchestruje session management, caching a persistence.
 """
 import logging
+import threading
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 from src.domain.models import SampleMetadata
@@ -17,25 +18,28 @@ class SessionService:
         self.cache = cache_manager or Md5CacheManager()
         self.current_session_name: Optional[str] = None
         self.current_session_data: Optional[Dict[str, Any]] = None
+        self._lock = threading.Lock()
         
     def create_session(self, name: str) -> bool:
         """Vytvori novou session."""
         try:
-            session_data = self.repository.create(name)
-            self.current_session_name = name
-            self.current_session_data = session_data
-            self.cache.clear()
+            with self._lock:
+                session_data = self.repository.create(name)
+                self.current_session_name = name
+                self.current_session_data = session_data
+                self.cache.clear()
             return True
         except ValueError:
             return False
-            
+
     def load_session(self, name: str) -> bool:
         """Nacte session."""
         session_data = self.repository.load(name)
         if session_data:
-            self.current_session_name = name
-            self.current_session_data = session_data
-            self.cache.load_cache_from_dict(session_data.get("samples_cache", {}))
+            with self._lock:
+                self.current_session_name = name
+                self.current_session_data = session_data
+                self.cache.load_cache_from_dict(session_data.get("samples_cache", {}))
             return True
         return False
         
@@ -72,14 +76,15 @@ class SessionService:
         
     def cache_analyzed_samples(self, samples: List[SampleMetadata]):
         """Ulozi analyzovane samples do cache."""
-        for sample in samples:
-            if hasattr(sample, '_hash') and sample.analyzed:
-                cache_entry = self._create_cache_entry(sample)
-                self.cache.cache_analysis(sample._hash, cache_entry)
-                
-        if self.current_session_data:
-            self.current_session_data["samples_cache"] = self.cache.export_cache_to_dict()
-            self.repository.save(self.current_session_name, self.current_session_data)
+        with self._lock:
+            for sample in samples:
+                if hasattr(sample, '_hash') and sample.analyzed:
+                    cache_entry = self._create_cache_entry(sample)
+                    self.cache.cache_analysis(sample._hash, cache_entry)
+
+            if self.current_session_data:
+                self.current_session_data["samples_cache"] = self.cache.export_cache_to_dict()
+                self.repository.save(self.current_session_name, self.current_session_data)
             
     def _restore_sample_from_cache(self, sample, cached_data, file_hash):
         """Obnovi sample z cache."""

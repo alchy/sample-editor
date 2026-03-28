@@ -136,7 +136,7 @@ class Md5CacheManager:
         Returns:
             True pokud jsou data validni
         """
-        required_keys = ["filename", "analyzed_timestamp"]
+        required_keys = ["filename"]
         
         for key in required_keys:
             if key not in cached_data:

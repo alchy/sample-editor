@@ -4,10 +4,13 @@ Export endpoints:
   POST /api/v1/export/preview  — náhled co se bude exportovat (bez zápisu na disk)
 """
 
+import logging
 from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+
+logger = logging.getLogger(__name__)
 
 from api.schemas import ExportRequest, ExportResult, ExportPreviewItem, MappingEntry
 from api.dependencies import get_session_service
@@ -68,19 +71,18 @@ def export_samples(
 
     instrument_def_path = None
     if request.include_instrument_definition:
-        # Načíst metadata ze session
         session_metadata = {}
         if request.session_name:
-            session_service.load_session(request.session_name)
-            data = getattr(session_service, "_session_data", {}) or {}
+            data = session_service.get_session_data(request.session_name) or {}
             session_metadata = data.get("metadata", {})
             session_metadata["session_name"] = request.session_name
+            session_metadata["velocity_layers"] = data.get("velocity_layers", 4)
 
         try:
             def_path = manager.export_instrument_definition(session_metadata, mapping)
             instrument_def_path = str(def_path) if def_path else None
-        except Exception:
-            pass  # instrument definition je volitelná
+        except Exception as exc:
+            logger.warning(f"Export instrument-definition.json selhal: {exc}")
 
     failed_files = [
         {"filename": str(f[0]), "error": str(f[1])} if isinstance(f, tuple) else {"filename": str(f), "error": "unknown"}

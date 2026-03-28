@@ -66,10 +66,6 @@ class JsonSessionRepository(ISessionRepository):
             with open(session_file, 'r', encoding='utf-8') as f:
                 session_data = json.load(f)
 
-            # Update last access time
-            session_data["last_modified"] = datetime.now().isoformat()
-            self.save(session_name, session_data)
-
             logger.info(f"Loaded session: {session_name}")
             return session_data
 

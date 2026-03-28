@@ -19,13 +19,15 @@ from api.data_dirs import samples_dir, export_dir, AUDIO_EXTENSIONS
 
 router = APIRouter()
 
+_MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB per file
+
 
 @router.post("/files/{name}/upload")
 async def upload_files(
     name: str,
     files: List[UploadFile] = File(...),
 ):
-    """Nahraje jeden nebo více audio souborů do session."""
+    """Nahraje jeden nebo více audio souborů do session (max 500 MB / soubor)."""
     dest_dir = samples_dir(name)
     saved, skipped = [], []
 
@@ -34,8 +36,11 @@ async def upload_files(
         if suffix not in AUDIO_EXTENSIONS:
             skipped.append(f.filename)
             continue
-        dest = dest_dir / Path(f.filename).name
         content = await f.read()
+        if len(content) > _MAX_UPLOAD_BYTES:
+            skipped.append(f.filename)
+            continue
+        dest = dest_dir / Path(f.filename).name
         dest.write_bytes(content)
         saved.append(str(dest))
 
@@ -62,9 +67,8 @@ def list_export(name: str):
     """Vrátí seznam souborů v export složce."""
     d = export_dir(name)
     files = sorted(
-        {"name": f.name, "size": f.stat().st_size, "path": str(f)}
-        for f in d.iterdir()
-        if f.is_file()
+        [{"name": f.name, "size": f.stat().st_size, "path": str(f)} for f in d.iterdir() if f.is_file()],
+        key=lambda x: x["name"],
     )
     return {"files": files, "count": len(files)}
 
