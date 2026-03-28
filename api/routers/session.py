@@ -12,6 +12,8 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
+import re
+
 from api.schemas import (
     SessionCreateRequest, SessionInfo, SessionListResponse,
     FolderScanRequest, FolderScanResponse,
@@ -19,6 +21,16 @@ from api.schemas import (
 from api.dependencies import get_session_service
 from api.data_dirs import DATA_ROOT
 from src.application.services.session_service import SessionService
+
+_VALID_SESSION_NAME = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
+
+
+def _require_valid_session_name(name: str) -> None:
+    if not _VALID_SESSION_NAME.match(name):
+        raise HTTPException(
+            status_code=422,
+            detail="Neplatný název session. Povoleny jsou jen písmena, čísla, podtržítko a pomlčka (max 64 znaků).",
+        )
 
 router = APIRouter()
 
@@ -50,6 +62,7 @@ def create_session(
     service: SessionService = Depends(get_session_service),
 ):
     """Vytvoří novou session."""
+    _require_valid_session_name(request.name)
     ok = service.create_session(request.name)
     if not ok:
         raise HTTPException(status_code=409, detail=f"Session '{request.name}' již existuje.")
@@ -78,6 +91,7 @@ def create_session(
 @router.get("/session/{name}", response_model=SessionInfo)
 def get_session(name: str, service: SessionService = Depends(get_session_service)):
     """Načte informace o existující session."""
+    _require_valid_session_name(name)
     ok = service.load_session(name)
     if not ok:
         raise HTTPException(status_code=404, detail=f"Session '{name}' nenalezena.")
@@ -94,6 +108,7 @@ def scan_folder(
     Prohledá zadanou složku a vrátí seznam audio souborů.
     Neanalyzuje — jen vrátí cesty pro následné volání /analyze/batch.
     """
+    _require_valid_session_name(name)
     folder = Path(request.folder_path).resolve()
     # Omezení na DATA_ROOT — nelze skenovat libovolné systémové složky
     try:

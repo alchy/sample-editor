@@ -11,7 +11,8 @@ Sample mapping tool with pitch detection, velocity analysis, and intelligent ses
 - **RMS Velocity Analysis** — Intelligent amplitude analysis (500ms window)
 - **Web Interface** — Browser-based SPA with retro Yamaha A3000 styling
 - **Session Management** — Project-based workflow with MD5-based caching
-- **Multi-format Export** — Simultaneous export to 44.1kHz and 48kHz WAV
+- **Ithaca Export** — Simultaneous export to 44.1kHz and 48kHz WAV (proprietary format)
+- **SF2 Export** — SoundFont 2.01 export for use in any SF2-compatible sampler/DAW
 
 ### Advanced Functionality
 - Hash-based file caching (re-analysis skipped for unchanged files)
@@ -19,6 +20,7 @@ Sample mapping tool with pitch detection, velocity analysis, and intelligent ses
 - Configurable velocity layers (1–8)
 - REST API with Swagger docs (`/docs`)
 - Clean architecture: domain / application / infrastructure
+- Server-side path traversal and XSS protection
 
 ---
 
@@ -39,7 +41,8 @@ Sample mapping tool with pitch detection, velocity analysis, and intelligent ses
 │  POST /api/v1/analyze/batch                 │  → batch (blocking)
 │  WS   /api/v1/analyze/batch/ws              │  → batch + progress
 │  CRUD /api/v1/session/*                     │  → session mgmt
-│  POST /api/v1/export                        │  → WAV export
+│  POST /api/v1/export                        │  → WAV export (Ithaca)
+│  POST /api/v1/export/sf2                   │  → SF2 download
 │  GET  /api/v1/audio/file                    │  → audio stream
 └──────────────────┬─────────────────────────┘
                    │ Python
@@ -93,7 +96,8 @@ sample-editor/
 │       ├── persistence/
 │       │   ├── session_repository_impl.py  # JSON session files
 │       │   └── cache_manager.py     #   MD5-based file hash cache
-│       └── export/                  #   WAV resampling + export
+│       └── export/
+│           ├── sf2_exporter.py      #   SoundFont 2.01 generator
 │
 ├── config/                          # Centralized constants
 │   ├── audio_config.py              #   MIDI, velocity, timing
@@ -150,8 +154,13 @@ sequenceDiagram
 | `POST` | `/api/v1/session` | Create session |
 | `GET` | `/api/v1/session/{name}` | Get session info |
 | `POST` | `/api/v1/session/{name}/scan` | Scan folder for audio files |
-| `POST` | `/api/v1/export` | Export mapped samples to WAV |
-| `POST` | `/api/v1/files/upload` | Upload audio files to session |
+| `POST` | `/api/v1/export` | Export mapped samples to WAV (Ithaca format) |
+| `POST` | `/api/v1/export/preview` | Preview export without writing files |
+| `POST` | `/api/v1/export/sf2` | Generate and download SoundFont 2 (.sf2) |
+| `POST` | `/api/v1/files/{name}/upload` | Upload audio files to session |
+| `GET` | `/api/v1/files/{name}/samples` | List uploaded files |
+| `GET` | `/api/v1/files/{name}/export` | List exported files |
+| `GET` | `/api/v1/files/{name}/export/zip` | Download full export as ZIP |
 
 Interactive API docs: `http://localhost:8000/docs`
 
@@ -221,7 +230,8 @@ python api/run.py
 - Use **Auto-assign** for automatic velocity distribution
 
 ### 6. Export
-- Click **Export** — outputs `mXXX-velY-fZZ.wav` files to `data/{session}/export/`
+- **Export Ithaca** — outputs `mXXX-velY-fZZ.wav` files to `data/{session}/export/` (+ ZIP download)
+- **Export SF2** — generates a SoundFont 2.01 file and downloads it directly to your browser
 
 ---
 
@@ -240,11 +250,18 @@ mXXX-velY-fZZ.wav
 - `m060-vel4-f48.wav` → C4 (Middle C), medium, 48kHz
 - `m108-vel7-f48.wav` → C8, loudest, 48kHz
 
-### Export Specs
+### Ithaca Export Specs
 - **Format:** 16-bit PCM WAV
 - **Sample rates:** 44.1kHz and 48kHz (both generated simultaneously)
 - **Channels:** Mono or Stereo (preserves source)
 - **Extra output:** `instrument-definition.json` with session metadata
+
+### SF2 Export Specs
+- **Format:** SoundFont 2.01 (.sf2), compatible with all major SF2 samplers and DAWs
+- **Samples:** int16 mono (stereo auto-converted by channel averaging)
+- **Structure:** Single preset → single instrument → N velocity zones (keyRange + velRange per zone)
+- **Velocity mapping:** Zones divided evenly across 0–127 range based on session velocity layer count
+- **Download:** Streamed directly to browser — nothing stored on server
 
 ---
 
@@ -319,6 +336,17 @@ tests/
 
 ---
 
+## Security
+
+All file access is sandboxed to the `data/` directory:
+- Session names validated against `[a-zA-Z0-9_-]{1,64}` regex
+- All analysis and export `file_path` inputs verified via `resolve()` + `relative_to(DATA_ROOT)`
+- Folder scan restricted to `data/` — cannot enumerate arbitrary system directories
+- Download paths checked with `is_relative_to()` (immune to symlink/prefix attacks)
+- Frontend output escaped via `escHtml()` / `textContent` to prevent XSS
+
+---
+
 ## Future Enhancements
 
 - [ ] WebSocket progress for single-file analysis
@@ -327,7 +355,6 @@ tests/
 - [ ] MIDI file import for mapping templates
 - [ ] Multi-session management UI
 - [ ] Authentication for multi-user deployments
-- [ ] VST/AU plugin format export
 
 ---
 
