@@ -432,10 +432,6 @@ class ExportValidator:
                 if not sample.filepath or not sample.filepath.exists():
                     errors.append(f"Soubor {sample.filename} neexistuje")
 
-                # Validace analýzy
-                if not sample.analyzed:
-                    errors.append(f"Sample {sample.filename} nebyl analyzován")
-
             except Exception as e:
                 errors.append(f"Chyba při validaci: {e}")
 

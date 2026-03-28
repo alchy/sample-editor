@@ -31,8 +31,10 @@ sessions/
 
 # Temporary files
 *.tmp
-*.log
 *.bak
+
+# Server log
+server.log
 nul
 
 # OS

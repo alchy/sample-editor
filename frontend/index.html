@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sample Editor</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <h1>SAMPLE EDITOR</h1>
+  <span id="session-label" style="color:#888; font-size:12px;">— žádná session —</span>
+  <div class="spacer"></div>
+  <button onclick="openNewSessionModal()">+ Nová session</button>
+  <select id="session-select" onchange="loadSession(this.value)" style="width:180px;">
+    <option value="">— vybrat session —</option>
+  </select>
+</header>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <button onclick="triggerUpload()" id="btn-scan" disabled>⬆ Nahrát soubory</button>
+  <input type="file" id="upload-input" multiple accept=".wav,.aif,.aiff,.flac" style="display:none" onchange="handleFileInputChange(this)">
+  <button onclick="analyzeAll()" id="btn-analyze" disabled>🔍 Analyzovat</button>
+  <button onclick="autoAssign()" id="btn-auto" disabled>⚡ Auto-assign</button>
+  <div class="spacer"></div>
+  <label style="color:#888; font-size:11px;">Velocity vrstvy:</label>
+  <input type="number" id="vel-layers" value="8" min="1" max="8" style="width:50px;" onchange="rebuildMatrix()">
+  <button onclick="openExportModal()" id="btn-export" class="primary" disabled>⬇ Export Ithaca</button>
+  <button onclick="runExportSf2()" id="btn-export-sf2" class="primary" disabled>⬇ Export SF2</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- LEFT: sample list -->
+  <div class="panel-left">
+    <div class="section-title">Sampley (<span id="sample-count">0</span>)</div>
+    <div id="upload-dropzone" class="upload-dropzone">
+      <span id="upload-hint">↑ přetáhni WAV/AIF sem</span>
+      <div id="upload-progress-bar"><div id="upload-progress-fill"></div></div>
+    </div>
+    <div id="sample-list"></div>
+  </div>
+
+  <!-- RIGHT: mapping matrix -->
+  <div class="panel-matrix">
+    <div id="matrix-container">
+      <div style="color:#555; padding:40px; text-align:center;">
+        Načti session a složku se sampley, pak přetahuj sampley na noty v matici.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM: player -->
+<div class="bottom-bar">
+  <div id="player">
+    <span style="font-size:11px; color:#888;">▶ Přehrávání:</span>
+    <span id="now-playing">—</span>
+    <audio id="audio-elem" controls></audio>
+  </div>
+  <canvas id="vu-meter" width="200" height="28" title="VU Meter"></canvas>
+</div>
+
+<!-- LOG PANEL -->
+<div id="log-panel" class="collapsed">
+  <div id="log-header" onclick="toggleLog()">
+    <span class="log-title">LOG</span>
+    <span id="log-badge">0</span>
+    <div class="spacer"></div>
+    <button onclick="clearLog(event)" title="Smazat log">✕</button>
+  </div>
+  <div id="log-body"></div>
+</div>
+
+<!-- STATUS -->
+<div id="status-bar">Připraven.</div>
+
+<!-- ── MODALS ─────────────────────────────────────────── -->
+
+<!-- Nová session -->
+<div class="modal-overlay" id="modal-new-session">
+  <div class="modal">
+    <h2>Nová session</h2>
+    <div>
+      <label>Název session</label>
+      <input type="text" id="ns-name" placeholder="např. Piano_Steinway">
+    </div>
+    <div>
+      <label>Velocity vrstev (1–8)</label>
+      <input type="number" id="ns-vel" value="8" min="1" max="8">
+    </div>
+    <div>
+      <label>Název nástroje (volitelné)</label>
+      <input type="text" id="ns-instrument" placeholder="např. Steinway D">
+    </div>
+    <div class="modal-buttons">
+      <button onclick="closeModal('modal-new-session')">Zrušit</button>
+      <button class="primary" onclick="createSession()">Vytvořit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Download po exportu -->
+<div class="modal-overlay" id="modal-download">
+  <div class="modal">
+    <h2>Export dokončen</h2>
+    <div id="download-file-list" style="max-height:220px; overflow-y:auto; margin-bottom:4px;"></div>
+    <div class="modal-buttons" style="justify-content:space-between;">
+      <button class="primary" onclick="downloadZip()" id="btn-zip">⬇ Stáhnout ZIP</button>
+      <button onclick="closeModal('modal-download')">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export -->
+<div class="modal-overlay" id="modal-export">
+  <div class="modal">
+    <h2>Export</h2>
+    <div style="font-size:10px; color:var(--text-dim); margin-bottom:8px;">
+      Soubory budou uloženy na serveru v <code>data/{session}/export/</code><br>
+      a ke stažení jako ZIP archiv.
+    </div>
+    <div>
+      <label><input type="checkbox" id="export-def" checked style="width:auto; margin-right:6px;">
+        Vytvořit instrument-definition.json</label>
+    </div>
+    <div class="modal-buttons">
+      <button onclick="closeModal('modal-export')">Zrušit</button>
+      <button onclick="previewExport()">Náhled</button>
+      <button class="primary" onclick="runExport()">Exportovat</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

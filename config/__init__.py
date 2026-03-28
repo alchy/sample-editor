@@ -2,25 +2,8 @@
 config - Centrální konfigurace pro Sample Mapping Editor
 
 Použití:
-    from config import GUI, AUDIO, EXPORT, APP
-
-    # Použití konstant:
-    button.setFixedWidth(GUI.Dimensions.BTN_DRAG_WIDTH)
-    if AUDIO.MIDI.PIANO_MIN_MIDI <= midi <= AUDIO.MIDI.PIANO_MAX_MIDI:
-        ...
-    export_manager.set_format(EXPORT.ExportFormats.DEFAULT_FORMAT)
+    from config import AUDIO, EXPORT, APP
 """
-
-# Import všech konfiguračních tříd pro snadný přístup
-from .gui_config import (
-    Colors,
-    Dimensions,
-    Spacing,
-    Fonts,
-    Texts,
-    Formatting,
-    Styles,
-)
 
 from .audio_config import (
     MIDI,
@@ -57,18 +40,6 @@ from .app_config import (
     ValidationRules,
     Defaults,
 )
-
-# Vytvoř namespace objekty pro kategorické použití
-class GUI:
-    """GUI konfigurace - barvy, rozměry, texty, styly."""
-    Colors = Colors
-    Dimensions = Dimensions
-    Spacing = Spacing
-    Fonts = Fonts
-    Texts = Texts
-    Formatting = Formatting
-    Styles = Styles
-
 
 class AUDIO:
     """Audio konfigurace - MIDI, audio parametry, timing."""
@@ -136,19 +107,10 @@ if SESSIONS_DIR.exists():
 # Version info
 __version__ = AppInfo.VERSION
 __all__ = [
-    'GUI',
     'AUDIO',
     'EXPORT',
     'APP',
-    'SESSIONS_DIR',  # Export sessions directory
-    # Individual classes (pro direct import)
-    'Colors',
-    'Dimensions',
-    'Spacing',
-    'Fonts',
-    'Texts',
-    'Formatting',
-    'Styles',
+    'SESSIONS_DIR',
     'MIDI',
     'Velocity',
     'Audio',

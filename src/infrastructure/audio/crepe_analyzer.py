@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from typing import Dict, Any
 
+from typing import Optional
 from src.domain.interfaces.audio_analyzer import IPitchAnalyzer, PitchAnalysisResult, AudioData
 
 logger = logging.getLogger(__name__)
@@ -112,12 +113,13 @@ class CrepeAnalyzer(IPitchAnalyzer):
     
     def _fallback_detection(self, audio_data: AudioData) -> PitchAnalysisResult:
         """Fallback když CREPE není dostupný."""
+        logger.error("CREPE není nainstalován — analýza pitch nebude fungovat. Spusť: pip install crepe")
         return PitchAnalysisResult(method="crepe_unavailable")
     
     @staticmethod
-    def _frequency_to_midi(frequency: float) -> int:
-        """Převede frekvenci na MIDI notu."""
+    def _frequency_to_midi(frequency: float) -> Optional[int]:
+        """Převede frekvenci na MIDI notu. Vrátí None pro neplatnou frekvenci."""
         if frequency <= 0:
-            return 0
+            return None
         midi = 69 + 12 * np.log2(frequency / 440.0)
         return int(round(midi))
