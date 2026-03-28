@@ -90,6 +90,18 @@ class SessionService:
         sample.analyzed = True
         sample._hash = file_hash
         
+    def list_sessions(self) -> List[str]:
+        """Vrátí seznam názvů všech dostupných sessions."""
+        return self.repository.list_sessions()
+
+    def get_session_data(self, name: str) -> Optional[Dict[str, Any]]:
+        """Načte a vrátí surová data session ze repository."""
+        return self.repository.load(name)
+
+    def save_session_data(self, name: str, data: Dict[str, Any]) -> bool:
+        """Uloží surová data session přes repository."""
+        return self.repository.save(name, data)
+
     def _create_cache_entry(self, sample):
         """Vytvori cache entry ze sample."""
         return {

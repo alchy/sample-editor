@@ -18,10 +18,13 @@ app = FastAPI(
     description="REST API pro Sample Mapping Editor — analýza, session management, export.",
 )
 
-# CORS: povolí přístup z prohlížeče (localhost na různých portech)
+# CORS: povolí přístup pouze z localhost (dev server)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # v produkci omezit na konkrétní origin
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )

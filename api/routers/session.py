@@ -4,10 +4,9 @@ Session endpoints:
   POST /api/v1/session               — vytvoření nové session
   GET  /api/v1/session/{name}        — načtení session
   POST /api/v1/session/{name}/folders — nastavení složek
-  GET  /api/v1/session/{name}/scan   — skenování input složky
+  POST /api/v1/session/{name}/scan   — skenování složky
 """
 
-import os
 from pathlib import Path
 from typing import List
 
@@ -24,13 +23,8 @@ router = APIRouter()
 
 
 def _session_to_info(service: SessionService, name: str) -> SessionInfo:
-    """Převede interní stav session na SessionInfo schema."""
-    data = service.repository.load_session(name) if hasattr(service, "repository") else {}
-    if not data:
-        # Fallback: přímé čtení přes service
-        service.load_session(name)
-        data = getattr(service, "_current_session_data", {}) or {}
-
+    """Převede data session na SessionInfo schema."""
+    data = service.get_session_data(name) or {}
     return SessionInfo(
         name=name,
         created=data.get("created"),
@@ -46,8 +40,7 @@ def _session_to_info(service: SessionService, name: str) -> SessionInfo:
 @router.get("/session/list", response_model=SessionListResponse)
 def list_sessions(service: SessionService = Depends(get_session_service)):
     """Vrátí seznam názvů všech existujících sessions."""
-    names = service.list_sessions() if hasattr(service, "list_sessions") else []
-    return SessionListResponse(sessions=names)
+    return SessionListResponse(sessions=service.list_sessions())
 
 
 @router.post("/session", response_model=SessionInfo)
@@ -58,25 +51,26 @@ def create_session(
     """Vytvoří novou session."""
     ok = service.create_session(request.name)
     if not ok:
-        raise HTTPException(status_code=409, detail=f"Session '{request.name}' již existuje nebo ji nelze vytvořit.")
+        raise HTTPException(status_code=409, detail=f"Session '{request.name}' již existuje.")
 
-    # Nastavení volitelných metadat
-    if any([request.velocity_layers, request.instrument_name, request.input_folder, request.output_folder]):
-        data = service.get_session_data(request.name) if hasattr(service, "get_session_data") else {}
-        if data is not None:
-            data["velocity_layers"] = request.velocity_layers
-            if request.instrument_name:
-                data.setdefault("metadata", {})["instrument_name"] = request.instrument_name
-            if request.author:
-                data.setdefault("metadata", {})["author"] = request.author
-            if request.input_folder or request.output_folder:
-                data.setdefault("folders", {})
-                if request.input_folder:
-                    data["folders"]["input"] = request.input_folder
-                if request.output_folder:
-                    data["folders"]["output"] = request.output_folder
-            service.save_session_data(request.name, data) if hasattr(service, "save_session_data") else None
+    data = service.get_session_data(request.name) or {}
+    data["velocity_layers"] = request.velocity_layers
 
+    if request.instrument_name or request.author:
+        meta = data.setdefault("metadata", {})
+        if request.instrument_name:
+            meta["instrument_name"] = request.instrument_name
+        if request.author:
+            meta["author"] = request.author
+
+    if request.input_folder or request.output_folder:
+        folders = data.setdefault("folders", {})
+        if request.input_folder:
+            folders["input"] = request.input_folder
+        if request.output_folder:
+            folders["output"] = request.output_folder
+
+    service.save_session_data(request.name, data)
     return _session_to_info(service, request.name)
 
 
