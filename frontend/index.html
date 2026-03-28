@@ -65,6 +65,17 @@
   <canvas id="vu-meter" width="200" height="28" title="VU Meter"></canvas>
 </div>
 
+<!-- LOG PANEL -->
+<div id="log-panel" class="collapsed">
+  <div id="log-header" onclick="toggleLog()">
+    <span class="log-title">LOG</span>
+    <span id="log-badge">0</span>
+    <div class="spacer"></div>
+    <button onclick="clearLog(event)" title="Smazat log">✕</button>
+  </div>
+  <div id="log-body"></div>
+</div>
+
 <!-- STATUS -->
 <div id="status-bar">Připraven.</div>
 

@@ -556,6 +556,87 @@ input[type=text], input[type=number] { cursor: text; width: 160px; color: var(--
 #status-bar.error { color: var(--red-led); text-shadow: 0 0 4px rgba(255,32,32,0.4); }
 #status-bar.ok    { color: var(--green-led); text-shadow: 0 0 4px rgba(0,224,96,0.3); }
 
+/* ── LOG PANEL ───────────────────────────────────────────────────────────── */
+#log-panel {
+  background: #060c18;
+  border-top: 1px solid #0d1a30;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 150px;
+  transition: max-height 0.15s ease;
+  overflow: hidden;
+}
+#log-panel.collapsed { max-height: 20px; }
+
+#log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 12px;
+  background: #0a1525;
+  border-bottom: 1px solid #0d1a30;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+}
+#log-header:hover { background: #0e1e35; }
+
+.log-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
+#log-badge {
+  background: var(--ridge);
+  color: var(--amber-dim);
+  border: 1px solid var(--amber-dim);
+  border-radius: 2px;
+  padding: 0 5px;
+  font-size: 9px;
+  min-width: 18px;
+  text-align: center;
+  line-height: 14px;
+}
+#log-badge.has-error {
+  border-color: var(--red-led);
+  color: var(--red-led);
+}
+
+#log-header button {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 10px;
+  line-height: 1;
+}
+#log-header button:hover { color: var(--amber); }
+
+#log-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 3px 12px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.log-line {
+  white-space: pre;
+  font-size: 10px;
+  line-height: 1.5;
+  font-family: 'Share Tech Mono', monospace;
+}
+.log-line.DEBUG    { color: #1e3a5a; }
+.log-line.INFO     { color: #3a5a78; }
+.log-line.WARNING  { color: #8a6000; }
+.log-line.ERROR,
+.log-line.CRITICAL { color: #9a1010; text-shadow: 0 0 4px rgba(255,32,32,0.3); }
+
 /* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--ridge); }

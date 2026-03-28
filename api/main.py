@@ -4,6 +4,8 @@ FastAPI aplikace — Sample Editor API
 Spouštění: python api/run.py
 """
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -11,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from api.routers import analyze, session, export, files
+from api.routers.logs import router as logs_router, get_sse_handler
 
 app = FastAPI(
     title="Sample Editor API",
@@ -29,11 +32,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# SSE log handler — zachytává logy z api.* a src.* a streamuje je do prohlížeče
+_sse_handler = get_sse_handler()
+_sse_handler.setLevel(logging.DEBUG)
+for _log_name in ("api", "src"):
+    _lg = logging.getLogger(_log_name)
+    _lg.setLevel(logging.DEBUG)
+    _lg.addHandler(_sse_handler)
+
 # Routery
 app.include_router(analyze.router, prefix="/api/v1", tags=["analyze"])
 app.include_router(session.router, prefix="/api/v1", tags=["session"])
 app.include_router(export.router,  prefix="/api/v1", tags=["export"])
 app.include_router(files.router,   prefix="/api/v1", tags=["files"])
+app.include_router(logs_router,    prefix="/api/v1", tags=["logs"])
 
 
 _frontend_dir = Path(__file__).resolve().parent.parent / "frontend"

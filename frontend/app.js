@@ -568,9 +568,66 @@ async function previewExport() {
   }
 }
 
+// ── Log panel ─────────────────────────────────────────────
+let _logEs = null;
+let _logCount = 0;
+let _logHasError = false;
+
+function initLogStream() {
+  if (_logEs) { _logEs.close(); _logEs = null; }
+  _logEs = new EventSource(`${API}/logs/stream`);
+  _logEs.onmessage = e => {
+    try {
+      const rec = JSON.parse(e.data);
+      _appendLogLine(rec.time, rec.level, rec.msg);
+    } catch (_) {}
+  };
+  // EventSource se automaticky reconnectuje při chybě — není třeba handler
+}
+
+function _appendLogLine(time, level, msg) {
+  const body = document.getElementById('log-body');
+  const line = document.createElement('div');
+  line.className = `log-line ${level}`;
+  line.textContent = `${time} [${level.padEnd(8)}] ${msg}`;
+  body.appendChild(line);
+
+  // Max 300 řádků
+  while (body.children.length > 300) body.removeChild(body.firstChild);
+  body.scrollTop = body.scrollHeight;
+
+  _logCount++;
+  const badge = document.getElementById('log-badge');
+  badge.textContent = _logCount > 999 ? '999+' : _logCount;
+
+  if (level === 'ERROR' || level === 'CRITICAL') {
+    if (!_logHasError) {
+      _logHasError = true;
+      badge.classList.add('has-error');
+      // Rozbal panel při první chybě
+      document.getElementById('log-panel').classList.remove('collapsed');
+    }
+  }
+}
+
+function toggleLog() {
+  document.getElementById('log-panel').classList.toggle('collapsed');
+}
+
+function clearLog(e) {
+  e.stopPropagation();
+  document.getElementById('log-body').innerHTML = '';
+  _logCount = 0;
+  _logHasError = false;
+  const badge = document.getElementById('log-badge');
+  badge.textContent = '0';
+  badge.classList.remove('has-error');
+}
+
 // ── Init ──────────────────────────────────────────────────
 (async function init() {
   initUploadDropzone();
+  initLogStream();
   await loadSessionList();
   status('API připojeno. Vytvoř nebo vyber session.');
 })();
